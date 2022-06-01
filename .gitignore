@@ -1,0 +1,8 @@
+Data/Charts
+Data/Scenarios_1000_greaterthan2/*
+!Data/Scenarios_1000_greaterthan2/1test_scenario.txt
+
+Data/manhatten_graph.mg
+Data/ML_probabilities_greaterthan2.txt
+Data/trips_ML_daily_greaterthan2_with_revenue&minutes_backup.txt
+Data/Instances/manhattan-long-trips.xml
