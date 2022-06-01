@@ -56,9 +56,16 @@ register_interaction!(ax, :ndrag, NodeDrag(p))
 ######################### test the simulation #######################################
 
 # create the solution
-sol = generate_random_solution( open_stations_number = 3)
+#sol = generate_random_solution( open_stations_number = 3)
+
+# create the solution manually
+
+open_stations = [2, 15, 19]
+initial_car_number = [3, 2, 2]
+sol = Solution(open_stations, initial_car_number, [])
+
 # select the paths
-sol.selected_paths = sol.selected_paths = [false, true, true, true, true]
+sol.selected_paths = [false, true, true, true, true]
 
 initialize_sim(sol, scenario_path)
 

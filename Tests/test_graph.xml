@@ -14,7 +14,7 @@
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
-                    <max_number_of_charging_points>6</max_number_of_charging_points>
+                    <max_number_of_charging_points>10</max_number_of_charging_points>
                     <max_power>200000</max_power>
                     <charging_station_base_cost>5900000</charging_station_base_cost>
                     <charging_point_cost_slow>2200000</charging_point_cost_slow>
@@ -96,7 +96,7 @@
                     <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
                 </custom>
             </node>
-            <node id="9" type="2">
+            <node id="9" type="1">
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
@@ -109,7 +109,7 @@
                     <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
                 </custom>
             </node>
-            <node id="10" type="2">
+            <node id="10" type="1">
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
@@ -139,7 +139,7 @@
                     <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
                 </custom>
             </node>
-            <node id="13" type="2">
+            <node id="13" type="1">
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
@@ -152,7 +152,63 @@
                     <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
                 </custom>
             </node>
-            <node id="14" type="1">
+            <node id="14" type="2">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="15" type="1">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+            </node>
+            <node id="16" type="1">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>6</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="17" type="1">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>6</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="18" type="2">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="19" type="1">
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
@@ -251,71 +307,28 @@
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
-            
-            <link tail="0" head="5" id="13">
+            <link tail="15" head="16" id="13">
                 <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
-            <link tail="1" head="6" id="14">
+            <link tail="16" head="17" id="14">
                 <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
-            <link tail="2" head="7" id="15">
+            <link tail="17" head="18" id="15">
                 <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>1</maxSpeed>
                 </custom>
             </link>
-            <link tail="3" head="8" id="16">
-                <length>1</length>
-                <custom>
-                    <frc>3</frc>
-                    <maxSpeed>50</maxSpeed>
-                </custom>
-            </link>
-            <link tail="4" head="9" id="17">
-                <length>1</length>
-                <custom>
-                    <frc>3</frc>
-                    <maxSpeed>1</maxSpeed>
-                </custom>
-            </link>
-            <link tail="5" head="10" id="18">
-                <length>1</length>
-                <custom>
-                    <frc>3</frc>
-                    <maxSpeed>50</maxSpeed>
-                </custom>
-            </link>
-            <link tail="6" head="11" id="19">
-                <length>1</length>
-                <custom>
-                    <frc>3</frc>
-                    <maxSpeed>50</maxSpeed>
-                </custom>
-            </link>
-            <link tail="7" head="12" id="20">
-                <length>1</length>
-                <custom>
-                    <frc>3</frc>
-                    <maxSpeed>1</maxSpeed>
-                </custom>
-            </link>
-            <link tail="8" head="13" id="21">
-                <length>1</length>
-                <custom>
-                    <frc>3</frc>
-                    <maxSpeed>50</maxSpeed>
-                </custom>
-            </link>
-            <link tail="9" head="14" id="22">
+            <link tail="18" head="19" id="16">
                 <length>1</length>
                 <custom>
                     <frc>3</frc>
@@ -323,7 +336,148 @@
                 </custom>
             </link>
             
-            
+            <link tail="0" head="5" id="17">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>1</maxSpeed>
+                </custom>
+            </link>
+            <link tail="1" head="6" id="18">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="2" head="7" id="19">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="3" head="8" id="20">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>1</maxSpeed>
+                </custom>
+            </link>
+            <link tail="4" head="9" id="21">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="5" head="10" id="22">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="6" head="11" id="23">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>1</maxSpeed>
+                </custom>
+            </link>
+            <link tail="7" head="12" id="24">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="8" head="13" id="25">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="9" head="14" id="26">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>1</maxSpeed>
+                </custom>
+            </link>
+            <link tail="10" head="15" id="27">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="11" head="16" id="28">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="12" head="17" id="29">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>1</maxSpeed>
+                </custom>
+            </link>
+            <link tail="13" head="18" id="30">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="14" head="19" id="31">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+
+            <link tail="13" head="12" id="32">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="12" head="11" id="33">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>1</maxSpeed>
+                </custom>
+            </link>
+            <link tail="11" head="6" id="34">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="6" head="1" id="35">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="18" head="13" id="35">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
        </links>
+       
     </network>
 </instance>

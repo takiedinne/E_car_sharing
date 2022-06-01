@@ -18,13 +18,16 @@ global scenario_path = "Data/Scenarios_1000_greaterthan2/1test_scenario.txt"
 global maximum_walking_time = 5 # in min
 global walking_speed = 1/300 #( 1 link by 5 min) #1.34 # m/s
 global driving_speed = 1/60 #(1 link by 1 min) # 50Km /have
+
 global battery_capacity = 63360 # kWs
 global charging_rate = 17.600  # kW
 
-global online_request_serving = true # true if we consider the requests by their arrival order
-global penality = 10^6 # if the solution is infeasible so we return this penality
+global car_cost = 20000 #euro
+global fast_charging_unit = 22000 #euro
+global cost_factor = 10^6 # or 10^5
 
-global Print = true
+global online_request_serving = false # true if we consider the requests by their arrival order
+global penality = -10^6 # if the solution is infeasible so we return this penality
 
 #different status for the car
 global const CAR_PARKED = 1

@@ -18,9 +18,26 @@ mutable struct Station
         status (1=> free; 2=> reserved, 3=>occupied),
         cars (id) (if status == 3 ) 
     =#
+    max_number_of_charging_points
+    max_power
+    charging_station_base_cost
+    charging_point_cost_slow
+    max_charging_rate_per_charging_point_slow
+    charging_point_cost_fast
+    max_charging_rate_per_charging_point_fast
 end
 
-Station(total_parking_places::Integer, initial_cars_number::Integer, initial_id::Integer) = begin
+Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Integer) = begin
+    #get teh different information from the graph
+    prop_dict = props(manhaten_city_graph, station_node_id)
+    
+    total_parking_places = prop_dict[:max_number_of_charging_points]
+    max_power = prop_dict[:max_power]
+    charging_station_base_cost = prop_dict[:charging_station_base_cost]
+    charging_point_cost_slow = prop_dict[:charging_point_cost_slow]
+    max_charging_rate_per_charging_point_slow = prop_dict[:max_charging_rate_per_charging_point_slow]
+    charging_point_cost_fast = prop_dict[:charging_point_cost_fast]
+    max_charging_rate_per_charging_point_fast = prop_dict[:max_charging_rate_per_charging_point_fast]
     
     id = initial_id
     
@@ -35,7 +52,8 @@ Station(total_parking_places::Integer, initial_cars_number::Integer, initial_id:
                                 pending_reservation = zeros(Integer, total_parking_places) )
     
     
-    Station(cars, parking_places)
+    Station(cars, parking_places, total_parking_places, max_power, charging_station_base_cost, charging_point_cost_slow,
+             max_charging_rate_per_charging_point_slow, charging_point_cost_fast, max_charging_rate_per_charging_point_fast)
 end
 
 

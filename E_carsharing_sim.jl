@@ -15,7 +15,8 @@ include("util.jl")
 include("Vars.jl")
 
 #create the graph
-# manhaten_city_graph = create_graph_from_XML(Manhatten_network_details_file, save_file = "Data/manhatten_graph.mg")
+# manhaten_city_graph = create_graph_from_XML(Manhatten_network_details_file, save_file = "Data/test_graph.mg")
+# manhaten_city_graph = create_graph_from_XML("Tests/test_graph.xml", save_file = "Data/test_graph.mg")
 
 #to load the graph use the following instruction ===> it is better to load the graph in terme of computational performance
 global manhaten_city_graph = loadgraph(Manhatten_network_Metagraph_file, MGFormat())
@@ -58,14 +59,27 @@ global scenario # the requests list
             
             @process perform_the_trip_process(env, req, sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
         else #we couldn't serve the request there is no feasible path
-            print_simulation && println("Customer [", req.reqId, "]: We can not serve the request there is no feasible path")
-
+            # the cause message
+            if print_simulation
+                if (pickup_station_id == -1 || drop_off_station_id == -1)
+                    #there is no feasible path for the request
+                    cause_message = "there is no feasible path"
+                elseif print_simulation && selected_car_id == -1
+                    cause_message = "there is no available car"
+                elseif print_simulation && parking_place_id == -1
+                    cause_message = "there is no parking place"
+                end
+            end
+                 
+            print_simulation && printstyled(stdout, "Customer [", req.reqId, "]: We can not serve the request there is no feasible path (",cause_message,")\n", color = :light_red)
+           
             #if we are working on the ofline mode so we need to return a penality 
             if !online_request_serving
                 global failed = true
                 break
             end
         end
+        
 
     end
 
@@ -81,7 +95,7 @@ end
     #book the trip (the car + parking palce ,etc)
     book_trip(sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
 
-    print_simulation && println("Customer [", req.reqId, "]:the request is accepted")
+    print_simulation && println("Customer [", req.reqId, "]: the request is accepted")
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
 
     # simulate the walking time
@@ -102,6 +116,7 @@ end
 end
 
 function initialize_sim(sol::Solution, scenario_path)
+    global failed = false
     # construct the requests lists 
     global scenario = scenario_as_dataframe(scenario_path)
     global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
@@ -117,7 +132,7 @@ function initialize_sim(sol::Solution, scenario_path)
         total_parking_places = get_prop(manhaten_city_graph, sol.open_stations_ids[i], :max_number_of_charging_points)
         initial_cars_number = sol.initial_cars_number[i]
 
-        push!(stations, Station(total_parking_places, initial_cars_number, car_id))
+        push!(stations, Station(sol.open_stations_ids[i], initial_cars_number, car_id))
         car_id += initial_cars_number
     end
     
@@ -136,5 +151,16 @@ function E_carsharing_sim(sol::Solution)
     sim = Simulation()
     @process request_arrival_process(sim, scenario, sol)
     run(sim)
+    if failed
+        return penality
+    else
+        # count the objective function
+        global car_cost
+        total_cars_cost = sum(sol.initial_cars_number) * car_cost
+        total_station_cost = sum([station.charging_station_base_cost + 
+                                    station.max_number_of_charging_points * station.charging_point_cost_fast
+                                    for station in stations])
+        return revenues - (total_cars_cost  + total_station_cost ) / cost_factor
+    end
 end
 
