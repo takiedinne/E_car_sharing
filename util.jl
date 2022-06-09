@@ -133,61 +133,46 @@ function scenario_as_dataframe(scenario_path::String)
     return scenario_df
 end
 
-
-#=
-    accept the request according to the decision variables
-=#
-function accept_request(req, sol::Solution)
-    if !online_request_serving
-        # check if the req is in one of the selected paths
-        return req.reqId in all_feasible_paths[sol.selected_paths, :].req
-    else 
-        #online mode so there is no need to see the decision variables 
-        return true
-    end
-end
-
 function get_trip_info_for_request(req, sol::Solution, current_time)
     # information to return 
-    pickup_station_id = -1
-    drop_off_station_id = -1
+    pickup_station_id = -1 # the id of the station (inside the solution object) where we can take a car
+    drop_off_station_id = -1 # the id the station (inside the solution object) where we can drop off the car
     selected_car_id = -1 # the id of the car to be used to perform the trip
     parking_place_id =-1 # the id of the parking place in the drop off station
 
     if !online_request_serving
         #check if the request is selected to be served according to the decision variables
         paths = filter(row -> row.req == req.reqId, all_feasible_paths[sol.selected_paths, :] )
-        if isempty(paths)
-            print_simulation && println("Customer [", req.reqId, "]:the requests is rejected according to the decision variables")
-            return (-1, -1, -1, -1)
-        end
+        
     else
         #get the path 
         paths = all_requests_feasible_paths(DataFrame(req), sol)
     end
     
-           
     for path in eachrow(paths)
+        # if we are in the offline mode necessarilly paths contains only one path 
+
         # reset the information to be returned
         selected_car_id = -1 # the id of the car to be used to perform the trip
         parking_place_id =-1 # the id of the parking place in the drop off station
-    
         pickup_station_id = findfirst(in(path.origin_station), sol.open_stations_ids)
         drop_off_station_id = findfirst(in(path.destination_station), sol.open_stations_ids)
+
         battery_level_needed = get_battery_level_needed(path) # always 100%
-        expected_starting_time = current_time + get_walking_time(req.reqId, path.origin_station[1])
+        expected_start_riding_time = current_time + get_walking_time(req.ON, path.origin_station[1])
+        
         
         #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
         available_car_df = filter(row -> row.status == CAR_PARKED || 
-                                            (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_starting_time ),
+                                            (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_start_riding_time ),
                                             stations[pickup_station_id].cars)
         if !isempty(available_car_df)
             #check the battery consumption constraint
             # first we count the actual battery levels
-            refrech_battery_levels(sol, pickup_station_id, current_time) # count the actual battery levels
+            refrech_battery_levels(pickup_station_id, current_time) # count the actual battery levels
      
             # second, count the expected battery level at the time of departure of the trip.
-            expected_battery_levels = get_expected_battery_levels(available_car_df, current_time + get_walking_time(req.reqId, path.origin_station[1]))
+            expected_battery_levels = get_expected_battery_levels(available_car_df, current_time + get_walking_time(req.ON, path.origin_station[1]))
             
             #finaly, get the list of cars that meet the consumption constraint 
             car_index = findall(x -> x >= battery_level_needed, expected_battery_levels)
@@ -202,10 +187,12 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
                     selected_car_id = potential_selected_parked_cars_df[1, :].car_id
                 else
                     # or we select a comming car
-                    selected_car_id = available_car_ids[1, :].car_id
+                    selected_car_id = available_car_df[1, :].car_id
                 end
             end
-        end 
+        end
+    
+    
 
         #check if we could select a car from the pickup station
         if selected_car_id == -1
@@ -213,7 +200,6 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
                 #for offline mode we have information about the next requests let check if any future requests can help us to serve the current req
                 selected_car_id == see_future_requests(req)
             end
-
             if selected_car_id == -1
                 # the current path could not be used because we didn't find an available car for the trip
                 continue # see the next path
@@ -221,7 +207,7 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
         end
         
         #check the availability of the parking place (free places + expected to be free places)
-        expected_arrival_time = current_time + get_walking_time(req.reqId, path.origin_station[1]) + 
+        expected_arrival_time = current_time + get_walking_time(req.ON, path.origin_station[1]) + 
                                                 get_trip_duration(path.origin_station[1], path.destination_station[1])
         # first we group all the information in one Dataframe
         parking_and_cars_df = leftjoin(stations[drop_off_station_id].parking_places, stations[drop_off_station_id].cars, on = :cars => :car_id, makeunique=true)
@@ -242,26 +228,23 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
                 parking_place_id = available_places_df[1, :].p_id
             end
         else
-            #print_simulation && println("Customer [", req.reqId, "]:there is no parking place")
-            #return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
-            
             #the path can not be used because there is no available place
             continue
         end
     end
+    
 
     return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
 
 end
 
-
 #=
-    preprocessing step
+    the preprocessing procedure
 =#
 function all_requests_feasible_paths(requests_list::DataFrame, sol::Solution)
     paths = DataFrame( req = Integer[], origin_station = Integer[], destination_station = Integer[])
     
-    for req in eachrow(scenario)
+    for req in eachrow(requests_list)
         
         print_preprocessing && println("we are with req " , req.reqId)
         #check all possible starting station
@@ -287,7 +270,7 @@ function all_requests_feasible_paths(requests_list::DataFrame, sol::Solution)
                         total_time_for_trip = walking_time_to_destination_node + walking_time_to_origin_station + trip_duration
                         print_preprocessing &&  println("-------->the total trip duration considering start station $origin_station_id and destination station $destination_station_id is $total_time_for_trip")
                         # check the total length of the trip constraints
-                        if total_time_for_trip <= req.TrT
+                        if total_time_for_trip <= 1.1 * get_trip_duration(req.ON, req.DN)
                             print_preprocessing && println("---------->the trip is accepted")
                             push!(paths, (req.reqId, origin_station_id, destination_station_id))
                         end
@@ -300,12 +283,6 @@ function all_requests_feasible_paths(requests_list::DataFrame, sol::Solution)
     paths
 end
 
-#=
-
-=#
-function get_all_feasible_solution_for_request(req::DataFrameRow, sol::Solution)
-    
-end
 
 function get_walking_time(id_node1, id_node2)
     #= 
@@ -319,7 +296,6 @@ function get_walking_time(id_node1, id_node2)
         merge!(shortest_walking_paths, Dict(id_node1 => dijkstra_shortest_paths(non_directed_manhaten_city_graph, [id_node1]) ) )
     end
     walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60 #converte it to minutes
-    
     walking_time
 
 end
@@ -340,44 +316,60 @@ function get_trip_distance(id_node1, id_node2)
     distance
 end
 
-function get_trip_battery_consumption(id_node1, id_node2)
-    return 10
+function get_trip_battery_consumption(id_node1::Integer, id_node2::Integer, Tcar::car_type)
+    α = vehicle_specific_values[Tcar][:α]
+    β = vehicle_specific_values[Tcar][:β]
+    γ = vehicle_specific_values[Tcar][:γ]
+    battery_capacity = vehicle_specific_values[Tcar][:battery_capacity]
+    
+    distance = get_trip_distance(id_node1, id_node2)
+    percentage_energy_consumption = distance * (α + β * driving_speed^2 + γ / driving_speed) / battery_capacity * 100
+    
+    percentage_energy_consumption
+    #total_distance = battery_capacity / (α + β * driving_speed^2 + γ / driving_speed)
 end
 
 function get_potential_locations()
     collect(filter_vertices(manhaten_city_graph, :type, 2))
 end
 
-function book_the_car(sol::Solution, req, current_time, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
+#= function book_the_car(sol::Solution, req, current_time, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
     
     #get the estimated starting time
-    expected_starting_time = current_time + get_walking_time(req.ON, sol.open_stations_ids[pickup_station_id])
+    expected_start_riding_time = current_time + get_walking_time(req.ON, sol.open_stations_ids[pickup_station_id])
 
     #get the index of the cars
     car_indx = findfirst(in([selected_car_id]), stations[pickup_station_id].cars.car_id)
     
     #reserve the car and set the time of the reservation
     stations[pickup_station_id].cars.status[car_indx] = CAR_RESERVED
-    stations[pickup_station_id].cars.start_reservation_time[car_indx] = expected_starting_time
+    stations[pickup_station_id].cars.start_reservation_time[car_indx] = expected_start_riding_time
 
     #reserve the parking place
     stations[drop_off_station_id].parking_places.status[parking_place_id] = P_RESERVED # reserved
 end
-
+ =#
 function get_battery_level_needed(path)
     return 100
 end
 
+#=
+    this function calculate the expected battery level at time @time
+=#
 function get_expected_battery_levels(available_cars::DataFrame, time)
     expected_battery_level = copy(available_cars.last_battery_level)
     
     for i in 1:nrow(available_cars)
-        car = available_cars[i,:]
+        current_car = available_cars[i,:]
         #count the expected battery level 
-        if car.status in [CAR_PARKED, CAR_RESERVED]
-            charging_amount =  100 * (time - car.start_charging_time) / 
-                    ( battery_capacity / charging_rate / 60   #= to covenrt to minutes =#)
-            expected_battery_level[i] = min(100, car.last_battery_level + charging_amount)
+        if current_car.status in [CAR_PARKED, CAR_RESERVED]
+            charging_time = (time - current_car.start_charging_time) * 60 # convert it to seconds
+            battery_capacity = vehicle_specific_values[current_car.car_type][:battery_capacity]
+            charging_rate = vehicle_specific_values[current_car.car_type][:fast_charging_rate]
+
+            percentage_charging_amount =  100 * charging_time / (battery_capacity / charging_rate)
+            
+            expected_battery_level[i] = min(100, current_car.last_battery_level + percentage_charging_amount)
         end
     end
     expected_battery_level
@@ -386,40 +378,57 @@ end
 #=
     this function recounts the battery level of the cars in the station 
 =#
-function refrech_battery_levels(sol::Solution, station_id::Integer, current_time)
+function refrech_battery_levels(station_id::Integer, current_time)
     
     for car in eachrow(stations[station_id].cars)
-        #count the new 
-        if car.status in [CAR_PARKED, CAR_RESERVED]
-            charging_amount =  100 * (current_time - car.start_charging_time) / 
-                    ( battery_capacity / charging_rate / 60   #= to covenrt to minutes =#)
-            car.last_battery_level = min(100, car.last_battery_level + charging_amount)
+       
+        if car.status in [CAR_PARKED, CAR_RESERVED] # in both these cases the cars is supposed to be plugged-in the charger spot
+            charging_time = (current_time - car.start_charging_time) * 60 # convert it to seconds
+            battery_capacity = vehicle_specific_values[car.car_type][:battery_capacity]
+            charging_rate = vehicle_specific_values[car.car_type][:fast_charging_rate]
+            
+            percentage_charging_amount =  100 * charging_time / (battery_capacity / charging_rate) 
+
+            car.last_battery_level = min(100, car.last_battery_level + percentage_charging_amount)
             car.start_charging_time = current_time
         end
     end
 end
 
 #=
-    inputs:
+    in this function we don't do any check about the paramaters. the necessary check is done befor
+
+        inputs:
         @pickup_station_id: the station where the car to pick up is parked
         @drop_off_station_id: the station where the car will be parked after performing the trip
         @car_id: the id of the car to be taken
     outputs:
             Nothing
 =#
-
 function book_trip(sol::Solution, pickup_station_id, drop_off_station_id, car_id,
                      parking_place_id, start_trip_time, expected_arriving_time )
     # get the car index inside the data frame
     car_indx = findfirst(x -> x == car_id, stations[pickup_station_id].cars.car_id)
     
+    if car_indx === nothing
+        printstyled(stdout, "Error: We can not book the trip the selected car is not parked in the station\n", color = :light_red)
+        global failed = true
+        return
+    end
+           
     #  reserve the car
+    if stations[pickup_station_id].cars.status[car_indx] == CAR_RESERVED
+        printstyled(stdout, "Error: We can not book the trip the selected car is already reserved\n", color = :light_red)
+        global failed = true
+        return
+    end
+    
     stations[pickup_station_id].cars.status[car_indx] = CAR_RESERVED
     stations[pickup_station_id].cars.start_reservation_time[car_indx] = start_trip_time
 
     
     #decrease the battery level
-    stations[pickup_station_id].cars.last_battery_level[car_indx] -= get_trip_battery_consumption(sol.open_stations_ids[pickup_station_id], sol.open_stations_ids[drop_off_station_id])
+    stations[pickup_station_id].cars.last_battery_level[car_indx] -= get_trip_battery_consumption(sol.open_stations_ids[pickup_station_id], sol.open_stations_ids[drop_off_station_id], stations[pickup_station_id].cars.car_type[car_indx])
     
    
     # reserve the parking space
@@ -432,7 +441,7 @@ function book_trip(sol::Solution, pickup_station_id, drop_off_station_id, car_id
     end
 
     # change the status of the car and precise to the drop off station that it is in its way comming 
-    car =DataFrame(stations[pickup_station_id].cars[car_indx, :])
+    car =DataFrame(stations[pickup_station_id].cars[car_indx, :]) # copy
     car.expected_arrival_time[1] = expected_arriving_time
     car.status[1] = CAR_ON_WAY
     append!(stations[drop_off_station_id].cars, car)
@@ -452,23 +461,37 @@ end
 
 function start_riding(station_id, car_id)
     #free the parking place
-    transform!(stations[station_id].parking_places, :, 
-                AsTable(:) => ByRow(x -> (x.cars == car_id) ? free_parking_place(x) : 
-                (x.status, x.pending_reservation, x.cars)) 
-                => [:status, :pending_reservation, :cars])
+    car_indx = findfirst(x -> x == car_id, stations[station_id].cars.car_id)
+    parking_place_indx = findfirst(x -> x == car_id, stations[station_id].parking_places.cars)
 
+    if car_indx === nothing || parking_place_indx === nothing
+        printstyled(stdout, "Error: the car or the parking place are not found \n"; color=:light_red )
+        global failed = true 
+        return
+    end
+    
+    if stations[station_id].parking_places.pending_reservation[parking_place_indx] > 0
+        stations[station_id].parking_places.pending_reservation[parking_place_indx] -= 1
+        stations[station_id].parking_places.status[parking_place_indx] = P_RESERVED
+    else
+        stations[station_id].parking_places.status[parking_place_indx] = P_FREE
+    end
+    stations[station_id].parking_places.cars[parking_place_indx] = -1 # there is no cars
+   
     # delete the car from the station 
     filter!(row -> (row.car_id != car_id),stations[station_id].cars)
     
-    return #Nothing
 end
 
 function drop_car(drop_off_station_id, car_id, parking_place_id, current_time)
     
     # check if the parking place is free (basically it will be free but just we check if there is a problem)
     if stations[drop_off_station_id].parking_places[parking_place_id, :].status == P_OCCUPIED
-        print_simulation && printstyled(stdout, "the parking place is occupied there is problem in the simulatiuon logic\n"; color=:light_red )
+        printstyled(stdout, "Error: the parking place is occupied there is problem in the simulatiuon logic\n"; color=:light_red )
+        global failed = true
+        return
     end
+
     stations[drop_off_station_id].parking_places[parking_place_id, :].status = P_OCCUPIED
     stations[drop_off_station_id].parking_places[parking_place_id, :].cars = car_id
 
@@ -483,10 +506,65 @@ function drop_car(drop_off_station_id, car_id, parking_place_id, current_time)
     stations[drop_off_station_id].cars.start_reservation_time[car_indx] = 0.0
     stations[drop_off_station_id].cars.expected_arrival_time[car_indx] = 0.0
 
-    return # Nothing
 end
 
 function see_future_requests(req)
     return -1
 end
 
+function serve_from_potential_refusal_requests()
+    if !isempty(potential_refusal_requests)
+        global failed = true
+    end
+end
+
+function draw_graph_and_scenario(manhaten_city_graph, scenario)
+    cols = []
+    node_size = Array{Real, 1}()
+    node_marker = [:circle for i in 0:nv(manhaten_city_graph)-1]
+
+    for i in 1:nv(manhaten_city_graph)
+        if get_prop(manhaten_city_graph, i, :type) == 2
+            push!(node_size, 40)
+            push!(cols,  :blue )
+            node_marker[i] = :rect
+        else
+            push!(node_size, 20)
+            push!(cols, :black ) 
+        end
+    end
+    req_colors= [:red, :yellow, :green, :gray]
+    for req in eachrow(scenario)
+        if node_marker[req.ON ] == :circle
+            node_marker[req.ON] = :star5
+            node_size[req.ON] = 40
+            cols[req.ON] = req_colors[req.reqId]
+        end
+        if node_marker[req.DN ] == :circle
+            node_marker[req.DN ] = :diamond
+            node_size[req.DN] = 40
+            cols[req.DN] = req_colors[req.reqId]
+        end
+    end
+    
+    edge_labels = String[]
+    for e in collect(edges(manhaten_city_graph))
+        weight = get_prop(manhaten_city_graph, e.src, e.dst, :weight)
+        push!(edge_labels, string(weight))
+    end
+
+    f, ax, p = graphplot(manhaten_city_graph, edge_width=[3 for i in 1:ne(manhaten_city_graph)],
+                        node_size=node_size ,
+                        node_color=cols,
+                        nlabels = [string(i) for i in 1:nv(manhaten_city_graph)],
+                        elabels = edge_labels,
+                        node_marker = node_marker)
+
+    deregister_interaction!(ax, :rectanglezoom)
+
+    register_interaction!(ax, :nhover, NodeHoverHighlight(p))
+    register_interaction!(ax, :ehover, EdgeHoverHighlight(p))
+    register_interaction!(ax, :ndrag, NodeDrag(p))
+    
+    f
+end

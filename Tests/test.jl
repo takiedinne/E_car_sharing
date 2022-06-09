@@ -5,70 +5,63 @@ using GLMakie
 using GraphMakie
 using Colors
 
-
 ################################################################################
 ########################### draw the graph #####################################
+manhaten_city_graph = create_graph_from_XML("Tests/test_graph.xml", save_file ="Data/test_graph.mg")
 
-#cols = distinguishable_colors(nv(manhaten_city_graph), [RGB(1,1,1), RGB(0,0,0)], dropseed=true);
-cols = []
-node_size = Array{Real, 1}()
-node_marker = [:circle for i in 0:nv(manhaten_city_graph)-1]
+global all_request_df = CSV.read(all_request_details_path, DataFrame)
+scenario = scenario_as_dataframe(scenario_path)
 
-for i in 1:nv(manhaten_city_graph)
-    if get_prop(manhaten_city_graph, i, :type) == 2
-        push!(node_size, 40)
-        push!(cols,  :blue )
-        node_marker[i] = :rect
-    else
-        push!(node_size, 20)
-        push!(cols, :black ) 
-    end
-end
-req_colors= [:red, :yellow, :gray, :green]
-for req in eachrow(scenario)
-    if node_marker[req.ON ] == :circle
-        node_marker[req.ON] = :star5
-        node_size[req.ON] = 40
-        cols[req.ON] = req_colors[req.reqId]
-    end
-    if node_marker[req.DN ] == :circle
-        node_marker[req.DN ] = :diamond
-        node_size[req.DN] = 40
-        cols[req.DN] = req_colors[req.reqId]
-    end
-end
+draw_graph_and_scenario(manhaten_city_graph, scenario)
 
-f, ax, p = graphplot(manhaten_city_graph, edge_width=[3 for i in 1:ne(manhaten_city_graph)],
-                     node_size=node_size ,
-                     node_color=cols,
-                     nlabels = [string(i) for i in 0:nv(manhaten_city_graph)-1],
-                     node_marker = node_marker)
+##################################################################################"
+# test the number of paths in the preprocessing procedure
 
-deregister_interaction!(ax, :rectanglezoom)
+props(manhaten_city_graph, 19)
 
-register_interaction!(ax, :nhover, NodeHoverHighlight(p))
-register_interaction!(ax, :ehover, EdgeHoverHighlight(p))
-register_interaction!(ax, :ndrag, NodeDrag(p))
+scenario = scenario_as_dataframe(scenario_path)
+
+a = all_requests_feasible_paths(scenario, sol)
 
 
+global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
+global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
 
+origine_node = 20
+destination_node = 8
+origin_station = 19
+destination_station = 7
+
+global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
+global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
+
+
+trips_total_duration = get_walking_time(origine_node,origin_station) + get_trip_duration(origin_station, destination_station) + get_walking_time(destination_station,destination_node)
+
+threshold = 1.1 * get_trip_duration(origine_node, destination_node)
+
+get_trip_duration(13, 18)
+get_walking_time(1,2)
+#####################################################################################
 #####################################################################################
 ######################### test the simulation #######################################
-
+include("../E_carsharing_sim.jl")
 # create the solution
-#sol = generate_random_solution( open_stations_number = 3)
+sol = generate_random_solution( open_stations_number = 30)
 
 # create the solution manually
+#= 
+open_stations = [19, 41, 60]
 
-open_stations = [2, 15, 19]
-initial_car_number = [3, 2, 2]
+initial_car_number = [2, 2, 2]
 sol = Solution(open_stations, initial_car_number, [])
 
 # select the paths
-sol.selected_paths = [false, true, true, true, true]
+sol.selected_paths = [true, true, true,#= true, true,  false, true, true =#]
 
 initialize_sim(sol, scenario_path)
+ =#
+using BenchmarkTools
 
-E_carsharing_sim(sol)
+@time E_carsharing_sim(sol)
 
-scenario

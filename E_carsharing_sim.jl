@@ -40,11 +40,17 @@ global revenues = 0 #
 global stations = Array{Station, 1}() 
 global scenario # the requests list
 
-@resumable function request_arrival_process(env::Environment, scenario::DataFrame, sol::Solution)
+global potential_refusal_requests = []
 
+@resumable function request_arrival_process(env::Environment, scenario::DataFrame, sol::Solution)
+    
     #browse all the requests (the requests are sorted according to their arrival time)
     for req in eachrow(scenario)
-
+        
+        # in the offline mode we check if we failed to serve a request so we stop the simulation
+        if !online_request_serving && failed
+            break
+        end
         # waiting until a new request is arrived 
         sleeping_time = req.ST - now(env)
         @yield timeout(env, sleeping_time)
@@ -52,13 +58,23 @@ global scenario # the requests list
 
         # get the trip information (pickup station, drop off station, the selected car id, parking place)
         # if the request can not be served, this function will return -1 in one of the information variables
+        
+        # in the offline mode we can check if the request is decided to be served
+        if !online_request_serving && req.reqId ∉ all_feasible_paths[sol.selected_paths, :].req
+            # the resuest is refused by the decision variables
+            print_simulation && println("Customer [", req.reqId, "]: the requests is rejected according to the decision variables")
+            continue
+        end
         pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id = get_trip_info_for_request(req, sol, now(env)) # one row Dataframe
 
+         
         # check the availabilty of paths to serve the request
         if pickup_station_id != -1 && drop_off_station_id != -1 && selected_car_id != -1 && parking_place_id != -1
-            
-            @process perform_the_trip_process(env, req, sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
-        else #we couldn't serve the request there is no feasible path
+            if pickup_station_id != drop_off_station_id
+                @process perform_the_trip_process(env, req, sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
+            end
+        else
+            #we couldn't serve the request there is no feasible path
             # the cause message
             if print_simulation
                 if (pickup_station_id == -1 || drop_off_station_id == -1)
@@ -71,12 +87,14 @@ global scenario # the requests list
                 end
             end
                  
-            print_simulation && printstyled(stdout, "Customer [", req.reqId, "]: We can not serve the request there is no feasible path (",cause_message,")\n", color = :light_red)
+            print_simulation && printstyled(stdout, "Customer [", req.reqId, "]: We can not serve the request there is no feasible path (",cause_message,")\n", color = :yellow)
            
             #if we are working on the ofline mode so we need to return a penality 
             if !online_request_serving
-                global failed = true
-                break
+                # Here we add the request to the list so that we can check later if we are able to serve it.
+                push!(potential_refusal_requests, req)
+                #= global failed = true
+                break =#
             end
         end
         
@@ -94,13 +112,17 @@ end
     
     #book the trip (the car + parking palce ,etc)
     book_trip(sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
-
+    
+    #= if req.reqId == 11913
+        @show stations[drop_off_station_id].cars
+        @show stations[pickup_station_id].cars
+    end =#
     print_simulation && println("Customer [", req.reqId, "]: the request is accepted")
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
 
     # simulate the walking time
     @yield timeout(env, walking_duration)
-    print_simulation && println("Customer [", req.reqId, "]: arrive at the station ", sol.open_stations_ids[pickup_station_id], " at ",now(env),"and he is taking the car number ", selected_car_id)
+    print_simulation && println("Customer [", req.reqId, "]: arrive at the station ", sol.open_stations_ids[pickup_station_id], " at ",now(env)," and he is taking the car number ", selected_car_id)
     
     print_simulation && println("Customer [", req.reqId, "]: start ridding at ", now(env))
     start_riding(pickup_station_id, selected_car_id)
@@ -113,17 +135,21 @@ end
 
     #make the payment
     global revenues += req.Rev
+
+    # in the offline mode we check if we are able to serve any requests from the list of potential refusal requests
+    if !online_request_serving
+        serve_from_potential_refusal_requests()
+    end
 end
 
 function initialize_sim(sol::Solution, scenario_path)
     global failed = false
+    global revenues = 0
     # construct the requests lists 
     global scenario = scenario_as_dataframe(scenario_path)
     global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
     global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
-
-    #result of the pre-processing step
-    global all_feasible_paths
+    global potential_refusal_requests = []
     
     global stations = Array{Station, 1}()
     #set the stations
@@ -145,18 +171,20 @@ end
 function E_carsharing_sim(sol::Solution)
    
     initialize_sim(sol, scenario_path)
-     # check the feasibilty of the solution
-     is_feasible_solution(sol)
+    # check the feasibilty of the solution
+    is_feasible_solution(sol)
     
     sim = Simulation()
     @process request_arrival_process(sim, scenario, sol)
     run(sim)
-    if failed
+    if failed || (!online_request_serving && !isempty(potential_refusal_requests))
+        print_simulation && printstyled(stdout, "The simulation is stopped because a request couldn't be served\n", color = :light_red)
         return penality
     else
         # count the objective function
-        global car_cost
-        total_cars_cost = sum(sol.initial_cars_number) * car_cost
+        print_simulation && println("counting the objective function")
+        total_cars_cost = [[vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] for j in 1:nrow(stations[i].cars)] for i in 1:length(sol.open_stations_ids)] 
+
         total_station_cost = sum([station.charging_station_base_cost + 
                                     station.max_number_of_charging_points * station.charging_point_cost_fast
                                     for station in stations])

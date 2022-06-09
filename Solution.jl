@@ -1,12 +1,9 @@
 # data Structure:
-mutable struct Ecar
-    start_charging_time::Integer # time when the car is plugged-in the charging units
-    last_battery_lavel::Float64
-end
+@enum car_type Smart_ED Nissan_LEAF Mitsubishi_iMIEV
 
 mutable struct Station
     cars::DataFrame 
-    #= each row represents a car (car_id, status,
+    #= each row represents a car (car_id, car_type (ED) status,
             last_battery_level, start_charging_time,
             start_reservation_time, expected_arrival_time)
      status of the cars : 1=> parked,
@@ -41,9 +38,10 @@ Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Inte
     
     id = initial_id
     
-    cars = DataFrame(car_id = collect(id:id+initial_cars_number-1), status = CAR_PARKED .* ones(Integer, initial_cars_number),
+    cars = DataFrame(car_id = collect(id:id+initial_cars_number-1), car_type = [Smart_ED for i in 1:initial_cars_number],
+                    status = CAR_PARKED .* ones(Integer, initial_cars_number),
                     last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = zeros(initial_cars_number),
-                     start_reservation_time = zeros(initial_cars_number), expected_arrival_time = zeros(initial_cars_number))
+                    start_reservation_time = zeros(initial_cars_number), expected_arrival_time = zeros(initial_cars_number))
     
     #create the parking places
     parking_places = DataFrame(p_id = collect(1:total_parking_places), 
@@ -108,8 +106,6 @@ end
         Feasible => Boolean which is true if the solution is feasible, false otherwise.
 =#
 function is_feasible_solution(sol::Solution)
-    global all_feasible_paths
-    selected_paths = all_feasible_paths[sol.selected_paths, :]
     
     #check the initial number of cars (constraint 7 and 8)
     for i in 1:length(sol.open_stations_ids)
@@ -118,21 +114,25 @@ function is_feasible_solution(sol::Solution)
             return false
         end
     end
-
-    # check if the customer is served by  at most one trip (constraint 2)
-    if nrow(selected_paths) != length(unique(selected_paths.req))
-        println("there is at least a customer served by more than one trip")
-        return false
-    end
-    
-    open_stations_df = DataFrame(station_ids = sol.open_stations_ids) # usuful for innerjoin
-    
-    #check if each station in the selected trips is open (constraint 3)
-    if nrow(innerjoin(selected_paths, open_stations_df, on = :origin_station => :station_ids)) != nrow(selected_paths) ||
-        nrow(innerjoin(selected_paths, open_stations_df, on = :destination_station => :station_ids)) != nrow(selected_paths)
+    if !online_request_serving
+        global all_feasible_paths
+        selected_paths = all_feasible_paths[sol.selected_paths, :]
         
-        println("there is at least one closed station in the feasible paths")
-        return false
+        # check if the customer is served by  at most one trip (constraint 2)
+        if nrow(selected_paths) != length(unique(selected_paths.req))
+            println("there is at least a customer served by more than one trip")
+            return false
+        end
+        
+        open_stations_df = DataFrame(station_ids = sol.open_stations_ids) # usuful for innerjoin
+        
+        #check if each station in the selected trips is open (constraint 3)
+        if nrow(innerjoin(selected_paths, open_stations_df, on = :origin_station => :station_ids)) != nrow(selected_paths) ||
+            nrow(innerjoin(selected_paths, open_stations_df, on = :destination_station => :station_ids)) != nrow(selected_paths)
+            
+            println("there is at least one closed station in the feasible paths")
+            return false
+        end
     end
 
     # constraint 4, 5 and 6  are to be checked in the simulation
