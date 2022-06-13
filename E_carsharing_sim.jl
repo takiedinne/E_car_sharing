@@ -48,7 +48,7 @@ global potential_refusal_requests = []
     for req in eachrow(scenario)
         
         # in the offline mode we check if we failed to serve a request so we stop the simulation
-        if !online_request_serving && failed
+        if #= !online_request_serving &&  =#failed
             break
         end
         # waiting until a new request is arrived 
@@ -59,7 +59,7 @@ global potential_refusal_requests = []
         # get the trip information (pickup station, drop off station, the selected car id, parking place)
         # if the request can not be served, this function will return -1 in one of the information variables
         
-        # in the offline mode we can check if the request is decided to be served
+        # in the offline mode we can check if the request is decided to be served according to the decision variables
         if !online_request_serving && req.reqId ∉ all_feasible_paths[sol.selected_paths, :].req
             # the resuest is refused by the decision variables
             print_simulation && println("Customer [", req.reqId, "]: the requests is rejected according to the decision variables")
@@ -183,7 +183,13 @@ function E_carsharing_sim(sol::Solution)
     else
         # count the objective function
         print_simulation && println("counting the objective function")
-        total_cars_cost = [[vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] for j in 1:nrow(stations[i].cars)] for i in 1:length(sol.open_stations_ids)] 
+
+        total_cars_cost = 0
+        for i in 1:length(stations)
+            if nrow(stations[i].cars) > 0 
+                total_cars_cost += sum([vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] for j in 1:nrow(stations[i].cars)] )
+            end 
+        end
 
         total_station_cost = sum([station.charging_station_base_cost + 
                                     station.max_number_of_charging_points * station.charging_point_cost_fast

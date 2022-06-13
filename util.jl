@@ -157,7 +157,7 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
         parking_place_id =-1 # the id of the parking place in the drop off station
         pickup_station_id = findfirst(in(path.origin_station), sol.open_stations_ids)
         drop_off_station_id = findfirst(in(path.destination_station), sol.open_stations_ids)
-
+        
         battery_level_needed = get_battery_level_needed(path) # always 100%
         expected_start_riding_time = current_time + get_walking_time(req.ON, path.origin_station[1])
         
@@ -177,7 +177,7 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
             #finaly, get the list of cars that meet the consumption constraint 
             car_index = findall(x -> x >= battery_level_needed, expected_battery_levels)
             
-            if !isnothing(car_index)
+            if !isempty(car_index)
                 # here at least there is a car that meet the consumption constraint
 
                 # first we privilege a parked car
@@ -214,17 +214,18 @@ function get_trip_info_for_request(req, sol::Solution, current_time)
         
         #get the available places
         available_places_df = filter(row-> row.status == P_FREE || 
-                                    (!ismissing(row.status_1) && row.status_1 == CAR_RESERVED && row.start_reservation_time <= expected_arrival_time),
-                                parking_and_cars_df )
+                                    (!ismissing(row.status_1) && row.status_1 == CAR_RESERVED && row.start_reservation_time <= expected_arrival_time
+                                        && row.pending_reservation == 0),
+                                parking_and_cars_df)
         
         if !isempty(available_places_df)
             # here we are sure that there is a place
-            potential_selected_parked_place_df = filter(row -> row.status == P_FREE, available_places_df)
-            if !isempty(potential_selected_parked_place_df)
-                # simply we select the first one --> or we can privilege  the car that has the maximum battery level
-                parking_place_id = potential_selected_parked_place_df[1, :].p_id
+            immediately_free_parking_place = filter(row -> row.status == P_FREE, available_places_df)
+            if !isempty(immediately_free_parking_place)
+                # simply we select the first free place
+                parking_place_id = immediately_free_parking_place[1, :].p_id
             else
-                # or we select a comming car
+                # or we select any place
                 parking_place_id = available_places_df[1, :].p_id
             end
         else
@@ -333,22 +334,6 @@ function get_potential_locations()
     collect(filter_vertices(manhaten_city_graph, :type, 2))
 end
 
-#= function book_the_car(sol::Solution, req, current_time, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
-    
-    #get the estimated starting time
-    expected_start_riding_time = current_time + get_walking_time(req.ON, sol.open_stations_ids[pickup_station_id])
-
-    #get the index of the cars
-    car_indx = findfirst(in([selected_car_id]), stations[pickup_station_id].cars.car_id)
-    
-    #reserve the car and set the time of the reservation
-    stations[pickup_station_id].cars.status[car_indx] = CAR_RESERVED
-    stations[pickup_station_id].cars.start_reservation_time[car_indx] = expected_start_riding_time
-
-    #reserve the parking place
-    stations[drop_off_station_id].parking_places.status[parking_place_id] = P_RESERVED # reserved
-end
- =#
 function get_battery_level_needed(path)
     return 100
 end
@@ -423,7 +408,12 @@ function book_trip(sol::Solution, pickup_station_id, drop_off_station_id, car_id
         return
     end
     
-    stations[pickup_station_id].cars.status[car_indx] = CAR_RESERVED
+    if stations[pickup_station_id].cars.status[car_indx] != CAR_ON_WAY
+        stations[pickup_station_id].cars.status[car_indx] = CAR_RESERVED
+    else
+        stations[pickup_station_id].cars.pending_reservation[car_indx] += 1
+    end
+
     stations[pickup_station_id].cars.start_reservation_time[car_indx] = start_trip_time
 
     
@@ -441,7 +431,7 @@ function book_trip(sol::Solution, pickup_station_id, drop_off_station_id, car_id
     end
 
     # change the status of the car and precise to the drop off station that it is in its way comming 
-    car =DataFrame(stations[pickup_station_id].cars[car_indx, :]) # copy
+    car = DataFrame(stations[pickup_station_id].cars[car_indx, :]) # copy
     car.expected_arrival_time[1] = expected_arriving_time
     car.status[1] = CAR_ON_WAY
     append!(stations[drop_off_station_id].cars, car)
@@ -460,7 +450,7 @@ function free_parking_place(parking_place)
 end
 
 function start_riding(station_id, car_id)
-    #free the parking place
+    
     car_indx = findfirst(x -> x == car_id, stations[station_id].cars.car_id)
     parking_place_indx = findfirst(x -> x == car_id, stations[station_id].parking_places.cars)
 
@@ -470,6 +460,7 @@ function start_riding(station_id, car_id)
         return
     end
     
+    # free the parking place
     if stations[station_id].parking_places.pending_reservation[parking_place_indx] > 0
         stations[station_id].parking_places.pending_reservation[parking_place_indx] -= 1
         stations[station_id].parking_places.status[parking_place_indx] = P_RESERVED
@@ -486,14 +477,15 @@ end
 function drop_car(drop_off_station_id, car_id, parking_place_id, current_time)
     
     # check if the parking place is free (basically it will be free but just we check if there is a problem)
-    if stations[drop_off_station_id].parking_places[parking_place_id, :].status == P_OCCUPIED
+    if stations[drop_off_station_id].parking_places.status[parking_place_id] == P_OCCUPIED
         printstyled(stdout, "Error: the parking place is occupied there is problem in the simulatiuon logic\n"; color=:light_red )
         global failed = true
         return
     end
 
-    stations[drop_off_station_id].parking_places[parking_place_id, :].status = P_OCCUPIED
-    stations[drop_off_station_id].parking_places[parking_place_id, :].cars = car_id
+    # occupy the parking place
+    stations[drop_off_station_id].parking_places.status[parking_place_id] = P_OCCUPIED
+    stations[drop_off_station_id].parking_places.cars[parking_place_id] = car_id
 
     # get the car index inside the data frame
     car_indx = findfirst(x -> x == car_id, stations[drop_off_station_id].cars.car_id)

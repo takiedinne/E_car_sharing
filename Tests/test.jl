@@ -61,7 +61,12 @@ sol.selected_paths = [true, true, true,#= true, true,  false, true, true =#]
 
 initialize_sim(sol, scenario_path)
  =#
-using BenchmarkTools
+E_carsharing_sim(sol)
 
-@time E_carsharing_sim(sol)
 
+
+
+a = [[vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] 
+                                for j in 1:nrow(stations[i].cars)] for i in 1:length(sol.open_stations_ids)] 
+
+a
