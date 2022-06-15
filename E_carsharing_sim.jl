@@ -37,10 +37,9 @@ global failed = false #for the offline mode it is needed to stop the simulation
 
 global revenues = 0 #
 
-global stations = Array{Station, 1}() 
-global scenario # the requests list
+global stations = Array{Station, 1}() # list of stations
 
-global potential_refusal_requests = []
+global scenario # the requests lists
 
 @resumable function request_arrival_process(env::Environment, scenario::DataFrame, sol::Solution)
     
@@ -48,7 +47,7 @@ global potential_refusal_requests = []
     for req in eachrow(scenario)
         
         # in the offline mode we check if we failed to serve a request so we stop the simulation
-        if #= !online_request_serving &&  =#failed
+        if  !online_request_serving && failed
             break
         end
         # waiting until a new request is arrived 
@@ -65,6 +64,7 @@ global potential_refusal_requests = []
             print_simulation && println("Customer [", req.reqId, "]: the requests is rejected according to the decision variables")
             continue
         end
+        
         pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id = get_trip_info_for_request(req, sol, now(env)) # one row Dataframe
 
          
@@ -88,17 +88,7 @@ global potential_refusal_requests = []
             end
                  
             print_simulation && printstyled(stdout, "Customer [", req.reqId, "]: We can not serve the request there is no feasible path (",cause_message,")\n", color = :yellow)
-           
-            #if we are working on the ofline mode so we need to return a penality 
-            if !online_request_serving
-                # Here we add the request to the list so that we can check later if we are able to serve it.
-                push!(potential_refusal_requests, req)
-                #= global failed = true
-                break =#
-            end
         end
-        
-
     end
 
 end
@@ -113,10 +103,6 @@ end
     #book the trip (the car + parking palce ,etc)
     book_trip(sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
     
-    #= if req.reqId == 11913
-        @show stations[drop_off_station_id].cars
-        @show stations[pickup_station_id].cars
-    end =#
     print_simulation && println("Customer [", req.reqId, "]: the request is accepted")
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
 
@@ -125,7 +111,7 @@ end
     print_simulation && println("Customer [", req.reqId, "]: arrive at the station ", sol.open_stations_ids[pickup_station_id], " at ",now(env)," and he is taking the car number ", selected_car_id)
     
     print_simulation && println("Customer [", req.reqId, "]: start ridding at ", now(env))
-    start_riding(pickup_station_id, selected_car_id)
+    start_driving(pickup_station_id, selected_car_id)
     #simulate the riding time
     @yield timeout(env, driving_duration)
     print_simulation && println("Customer [", req.reqId, "]: drop the car off at the station ", sol.open_stations_ids[drop_off_station_id], " at ", now(env))
@@ -135,66 +121,53 @@ end
 
     #make the payment
     global revenues += req.Rev
-
-    # in the offline mode we check if we are able to serve any requests from the list of potential refusal requests
-    if !online_request_serving
-        serve_from_potential_refusal_requests()
-    end
 end
 
-function initialize_sim(sol::Solution, scenario_path)
+function initialize_sim(sol::Solution)
     global failed = false
     global revenues = 0
-    # construct the requests lists 
-    global scenario = scenario_as_dataframe(scenario_path)
-    global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
-    global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
-    global potential_refusal_requests = []
     
     global stations = Array{Station, 1}()
     #set the stations
     car_id = 1
     for i in 1:length(sol.open_stations_ids)
-        total_parking_places = get_prop(manhaten_city_graph, sol.open_stations_ids[i], :max_number_of_charging_points)
         initial_cars_number = sol.initial_cars_number[i]
-
         push!(stations, Station(sol.open_stations_ids[i], initial_cars_number, car_id))
         car_id += initial_cars_number
     end
-    
-    # preprossesing 
-    if !online_request_serving
-        global all_feasible_paths = all_requests_feasible_paths(scenario, sol)
-    end
+
 end
 
-function E_carsharing_sim(sol::Solution)
-   
-    initialize_sim(sol, scenario_path)
+function E_carsharing_sim(sol::Solution, scenario::DataFrame)
+
     # check the feasibilty of the solution
-    is_feasible_solution(sol)
-    
-    sim = Simulation()
-    @process request_arrival_process(sim, scenario, sol)
-    run(sim)
-    if failed || (!online_request_serving && !isempty(potential_refusal_requests))
-        print_simulation && printstyled(stdout, "The simulation is stopped because a request couldn't be served\n", color = :light_red)
-        return penality
-    else
-        # count the objective function
-        print_simulation && println("counting the objective function")
+    if is_feasible_solution(sol)
+        @elapsed initialize_sim(sol)
 
-        total_cars_cost = 0
-        for i in 1:length(stations)
-            if nrow(stations[i].cars) > 0 
-                total_cars_cost += sum([vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] for j in 1:nrow(stations[i].cars)] )
-            end 
+        sim = Simulation()
+        @process request_arrival_process(sim, scenario, sol)
+        run(sim)
+        if failed 
+            print_simulation && printstyled(stdout, "The simulation is stopped because a request couldn't be served\n", color = :light_red)
+            return penality
+        else
+            # count the objective function
+            print_simulation && println("counting the objective function")
+
+            total_cars_cost = 0
+            for i in 1:length(stations)
+                if nrow(stations[i].cars) > 0 
+                    total_cars_cost += sum([vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] for j in 1:nrow(stations[i].cars)] )
+                end 
+            end
+
+            total_station_cost = sum([station.charging_station_base_cost + 
+                                        station.max_number_of_charging_points * station.charging_point_cost_fast
+                                        for station in stations])
+            return revenues - (total_cars_cost  + total_station_cost ) / cost_factor
         end
-
-        total_station_cost = sum([station.charging_station_base_cost + 
-                                    station.max_number_of_charging_points * station.charging_point_cost_fast
-                                    for station in stations])
-        return revenues - (total_cars_cost  + total_station_cost ) / cost_factor
+    else
+        print_simulation && println("Thesolution is not feasible")
+        return penality
     end
 end
-

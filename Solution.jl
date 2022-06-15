@@ -42,7 +42,7 @@ Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Inte
                     status = CAR_PARKED .* ones(Integer, initial_cars_number),
                     last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = zeros(initial_cars_number),
                     start_reservation_time = zeros(initial_cars_number), pending_reservation = zeros(initial_cars_number), expected_arrival_time = zeros(initial_cars_number))
-    
+    car_id = [], car_type
     #create the parking places
     parking_places = DataFrame(p_id = collect(1:total_parking_places), 
                                 status = vcat(P_OCCUPIED .* ones(Integer, initial_cars_number), P_FREE .* ones(Integer, total_parking_places - initial_cars_number)), 
@@ -98,7 +98,7 @@ end
     Check whether or not the solution is feasible according to constraints 2, 3, 7 and 8 in Hatiçe paper
     inputs:
         @sol: the solution
-        @all_feasible_paths: the set all feasible paths given by the preprocessing procedure(all_requests_feasible_paths)
+        @all_feasible_paths: the set all feasible paths given by the preprocessing procedure(get_ all_requests_feasible_paths)
     outputs:
         Feasible => Boolean which is true if the solution is feasible, false otherwise.
 =#

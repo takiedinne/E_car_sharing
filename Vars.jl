@@ -10,7 +10,7 @@ global Manhatten_network_Metagraph_file = "Data/manhatten_graph.mg"
 
 # the file which contains the scenario details (that's need to move from here)
 global scenario_path = "Data/Scenarios_1000_greaterthan2/Output1000_1.txt"
-
+#global scenario_path = "Data/Scenarios_1000_greaterthan2/1test_scenario.txt"
 #general parameters for the simulation
 global maximum_walking_time = 5 # in min
 global walking_speed = 1.34 # m/s

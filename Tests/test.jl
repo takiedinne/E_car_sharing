@@ -1,5 +1,6 @@
 include("../E_carsharing_sim.jl")
 
+using BenchmarkTools
 using Makie
 using GLMakie
 using GraphMakie
@@ -7,66 +8,57 @@ using Colors
 
 ################################################################################
 ########################### draw the graph #####################################
-manhaten_city_graph = create_graph_from_XML("Tests/test_graph.xml", save_file ="Data/test_graph.mg")
+#= manhaten_city_graph = create_graph_from_XML("Tests/test_graph.xml", save_file ="Data/test_graph.mg")
 
 global all_request_df = CSV.read(all_request_details_path, DataFrame)
 scenario = scenario_as_dataframe(scenario_path)
 
-draw_graph_and_scenario(manhaten_city_graph, scenario)
+draw_graph_and_scenario(manhaten_city_graph, scenario) =#
 
-##################################################################################"
-# test the number of paths in the preprocessing procedure
-
-props(manhaten_city_graph, 19)
-
-scenario = scenario_as_dataframe(scenario_path)
-
-a = all_requests_feasible_paths(scenario, sol)
-
-
-global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
-global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
-
-origine_node = 20
-destination_node = 8
-origin_station = 19
-destination_station = 7
-
-global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
-global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
-
-
-trips_total_duration = get_walking_time(origine_node,origin_station) + get_trip_duration(origin_station, destination_station) + get_walking_time(destination_station,destination_node)
-
-threshold = 1.1 * get_trip_duration(origine_node, destination_node)
-
-get_trip_duration(13, 18)
-get_walking_time(1,2)
 #####################################################################################
 #####################################################################################
 ######################### test the simulation #######################################
+
 include("../E_carsharing_sim.jl")
 # create the solution
 sol = generate_random_solution( open_stations_number = 30)
 
-# create the solution manually
-#= 
-open_stations = [19, 41, 60]
+scenario = initilaize_scenario(scenario_path, sol)
 
-initial_car_number = [2, 2, 2]
-sol = Solution(open_stations, initial_car_number, [])
+using BenchmarkTools
+@benchmark E_carsharing_sim(sol, scenario)
 
-# select the paths
-sol.selected_paths = [true, true, true,#= true, true,  false, true, true =#]
 
-initialize_sim(sol, scenario_path)
- =#
-E_carsharing_sim(sol)
+global time1 = 0
+global time2 = 0
+global time3 = 0
+global time4 = 0
+global time5 = 0
 
 
 
 
-a = [[vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] 
-                                for j in 1:nrow(stations[i].cars)] for i in 1:length(sol.open_stations_ids)] 
+ 
+a1 = 100 * time1 / total_time
+a2 = 100 * time2 / total_time
+a3 = 100 * time3 / total_time
+a4 = 100 * time4 / total_time
+a5 = 100 * time5 / total_time
 
-a
+println("time $a1 %)")
+println("time $a2 %)")
+println("time $a3 %)")
+println("time $a4 %)")
+println("time $a5 %)")
+
+get_each_requests_feasible_paths(scenario, sol)
+
+a = get_all_requests_feasible_paths(scenario, sol)
+
+@benchmark b = [filter( x-> x.req == i, a) for i in scenario.reqId]
+
+filter( x-> x.req == 16738, a)
+
+sol.selected_paths = c
+
+scenario
