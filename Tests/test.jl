@@ -20,45 +20,38 @@ draw_graph_and_scenario(manhaten_city_graph, scenario) =#
 ######################### test the simulation #######################################
 
 include("../E_carsharing_sim.jl")
+using BenchmarkTools
 # create the solution
-sol = generate_random_solution( open_stations_number = 30)
+sol = generate_random_solution( open_stations_number = 3)
+sol.open_stations_ids = [7, 19, 24]
+sol.initial_cars_number = [2, 0, 0]
+sol.selected_paths = [true, true , true]
 
 scenario = initilaize_scenario(scenario_path, sol)
 
-using BenchmarkTools
-@benchmark E_carsharing_sim(sol, scenario)
-
-
-global time1 = 0
-global time2 = 0
-global time3 = 0
-global time4 = 0
-global time5 = 0
+E_carsharing_sim(sol, scenario)
 
 
 
 
- 
-a1 = 100 * time1 / total_time
-a2 = 100 * time2 / total_time
-a3 = 100 * time3 / total_time
-a4 = 100 * time4 / total_time
-a5 = 100 * time5 / total_time
+prgrm = Model()
+set_optimizer(prgrm, GLPK.Optimizer)
 
-println("time $a1 %)")
-println("time $a2 %)")
-println("time $a3 %)")
-println("time $a4 %)")
-println("time $a5 %)")
+@variable(prgrm, 0<=x)
+@variable(prgrm, 0<=y)
 
-get_each_requests_feasible_paths(scenario, sol)
+@constraint(prgrm, x <= 10)
+@constraint(prgrm, y <= 7.5)
 
-a = get_all_requests_feasible_paths(scenario, sol)
+@objective(prgrm, Max, x+2y)
 
-@benchmark b = [filter( x-> x.req == i, a) for i in scenario.reqId]
+using MathOptInterface
 
-filter( x-> x.req == 16738, a)
+write_to_file(prgrm, "test.mof.json")
 
-sol.selected_paths = c
+print(prgrm)
 
-scenario
+
+model = read_from_file("test.mof.json")
+
+println(model)

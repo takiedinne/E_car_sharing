@@ -24,6 +24,7 @@ mutable struct Station
     max_charging_rate_per_charging_point_fast
 end
 
+
 Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Integer) = begin
     #get teh different information from the graph
     prop_dict = props(manhaten_city_graph, station_node_id)
@@ -42,7 +43,7 @@ Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Inte
                     status = CAR_PARKED .* ones(Integer, initial_cars_number),
                     last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = zeros(initial_cars_number),
                     start_reservation_time = zeros(initial_cars_number), pending_reservation = zeros(initial_cars_number), expected_arrival_time = zeros(initial_cars_number))
-    car_id = [], car_type
+    
     #create the parking places
     parking_places = DataFrame(p_id = collect(1:total_parking_places), 
                                 status = vcat(P_OCCUPIED .* ones(Integer, initial_cars_number), P_FREE .* ones(Integer, total_parking_places - initial_cars_number)), 
@@ -53,7 +54,6 @@ Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Inte
     Station(cars, parking_places, total_parking_places, max_power, charging_station_base_cost, charging_point_cost_slow,
              max_charging_rate_per_charging_point_slow, charging_point_cost_fast, max_charging_rate_per_charging_point_fast)
 end
-
 
 mutable struct Solution
     # decision variables

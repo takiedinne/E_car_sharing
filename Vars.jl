@@ -16,6 +16,7 @@ global maximum_walking_time = 5 # in min
 global walking_speed = 1.34 # m/s
 global driving_speed =  50 #Km/h
 
+
 #= 
 # test parameters
 global all_request_details_path = "Data/trips_ML_daily_greaterthan2_with_revenue&minutes.txt"
@@ -52,7 +53,7 @@ global const P_OCCUPIED = 3
 # printing parameters
 global print_preprocessing = false
 
-global print_simulation = false
+global print_simulation = true
 
 global cost_factor = 10^6 # or 10^5
 

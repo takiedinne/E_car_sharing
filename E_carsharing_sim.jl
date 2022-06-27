@@ -59,20 +59,24 @@ global scenario # the requests lists
         # if the request can not be served, this function will return -1 in one of the information variables
         
         # in the offline mode we can check if the request is decided to be served according to the decision variables
-        if !online_request_serving && req.reqId ∉ all_feasible_paths[sol.selected_paths, :].req
-            # the resuest is refused by the decision variables
-            print_simulation && println("Customer [", req.reqId, "]: the requests is rejected according to the decision variables")
-            continue
+        if !online_request_serving
+            if req.reqId ∉ all_feasible_paths[sol.selected_paths, :].req
+                # the resuest is refused by the decision variables
+                print_simulation && println("Customer [", req.reqId, "]: the requests is rejected according to the decision variables")
+                continue
+            else
+                pickup_station_id = findfirst(x -> x == req.feasible_paths.origin_station[1], sol.open_stations_ids)
+                drop_off_station_id = findfirst(x -> x == req.feasible_paths.destination_station[1], sol.open_stations_ids)
+                selected_car_id, parking_place_id  =  -1, -1
+            end
+        else
+            pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id = get_trip_info_for_request(req, sol, now(env)) # one row Dataframe
         end
         
-        pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id = get_trip_info_for_request(req, sol, now(env)) # one row Dataframe
-
-         
         # check the availabilty of paths to serve the request
-        if pickup_station_id != -1 && drop_off_station_id != -1 && selected_car_id != -1 && parking_place_id != -1
-            if pickup_station_id != drop_off_station_id
-                @process perform_the_trip_process(env, req, sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
-            end
+        if pickup_station_id != -1 && drop_off_station_id != -1 && ( online_request_serving && selected_car_id != -1 && parking_place_id != -1 || !online_request_serving)
+            # for the online serving we check all the variables otherwise we nee only to check the stations
+            @process perform_the_trip_process(env, req, sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
         else
             #we couldn't serve the request there is no feasible path
             # the cause message
@@ -100,27 +104,60 @@ end
     start_walking_time = now(env)
     driving_duration = get_trip_duration(sol.open_stations_ids[pickup_station_id], sol.open_stations_ids[drop_off_station_id])
     
-    #book the trip (the car + parking palce ,etc)
-    book_trip(sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
-    
-    print_simulation && println("Customer [", req.reqId, "]: the request is accepted")
+    #book the trip (the car + parking palce ,etc) only for the 
+    if online_request_serving 
+        book_trip(sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
+    end
+    print_simulation && println("Customer [", req.reqId, "]: the request is accepted") #
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
 
     # simulate the walking time
     @yield timeout(env, walking_duration)
-    print_simulation && println("Customer [", req.reqId, "]: arrive at the station ", sol.open_stations_ids[pickup_station_id], " at ",now(env)," and he is taking the car number ", selected_car_id)
+    print_simulation && println("Customer [", req.reqId, "]: arrive at the station ", sol.open_stations_ids[pickup_station_id])
     
-    print_simulation && println("Customer [", req.reqId, "]: start ridding at ", now(env))
-    start_driving(pickup_station_id, selected_car_id)
-    #simulate the riding time
-    @yield timeout(env, driving_duration)
-    print_simulation && println("Customer [", req.reqId, "]: drop the car off at the station ", sol.open_stations_ids[drop_off_station_id], " at ", now(env))
+    #for the offline mode we have to check if there is a car 
+    if !online_request_serving
+        # check and select a car to performe the trip
+        refrech_battery_levels(pickup_station_id, now(env)) #refrech the battery leveles 
+        available_car_df = filter(row -> row.status == CAR_PARKED &&
+                                row.last_battery_level >= get_battery_level_needed((pickup_station_id, drop_off_station_id)),
+                                stations[pickup_station_id].cars)
+        if !isempty(available_car_df)
+            # simply we take the first found car
+            selected_car_id = available_car_df.car_id[1]
+        else
+            print_simulation && printstyled(stdout, "Customer [$(req.reqId)]: (offline mode) there is no available car at the station \n"; color=:light_red)
+            global failed = true
+        end 
+    end 
 
-    #drop the car
-    drop_car(drop_off_station_id, selected_car_id, parking_place_id, now(env))
+    if !failed # we couldn't start the trip 
+        print_simulation && println("Customer [", req.reqId, "]: start ridding the car number $selected_car_id at $(now(env))")
+    
+        start_driving(pickup_station_id, selected_car_id) # this function put failed true if there is not a car with the consumption constraints
 
-    #make the payment
-    global revenues += req.Rev
+        #simulate the riding time
+        @yield timeout(env, driving_duration)
+        # for offline mode we have to see if there is a parking place
+        if !online_request_serving
+            #get the available places
+            available_places_df = filter(row -> row.status == P_FREE, stations[drop_off_station_id].parking_places)
+            if !isempty(available_places_df)
+                # simply we select the first free place
+                parking_place_id = available_places_df.p_id[1]
+            else 
+                print_simulation && printstyled(stdout, "Customer [$(req.reqId)]: (offline mode) there is no free parking place\n"; color=:light_red)
+                global failed = true
+            end
+        end
+        if !failed # there is no place to drop the car
+            #drop the car
+            print_simulation && println("Customer [", req.reqId, "]: drop the car off at the station ", sol.open_stations_ids[drop_off_station_id], " at ", now(env))
+            drop_car(drop_off_station_id, selected_car_id, parking_place_id, now(env)) # this function put failed variable to true if we couldn't find a parking place 
+            #make the payment
+            global revenues += req.Rev
+        end
+    end
 end
 
 function initialize_sim(sol::Solution)

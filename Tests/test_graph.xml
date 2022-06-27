@@ -70,7 +70,7 @@
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
-                    <max_number_of_charging_points>6</max_number_of_charging_points>
+                    <max_number_of_charging_points>2</max_number_of_charging_points>
                     <max_power>200000</max_power>
                     <charging_station_base_cost>5900000</charging_station_base_cost>
                     <charging_point_cost_slow>2200000</charging_point_cost_slow>
@@ -208,7 +208,7 @@
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
-                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_number_of_charging_points>2</max_number_of_charging_points>
                     <max_power>200000</max_power>
                     <charging_station_base_cost>5900000</charging_station_base_cost>
                     <charging_point_cost_slow>2200000</charging_point_cost_slow>
@@ -273,7 +273,7 @@
                 <latitude>40.791992</latitude>
                 <longitude>-73.962189</longitude>
                 <custom>
-                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_number_of_charging_points>2</max_number_of_charging_points>
                     <max_power>200000</max_power>
                     <charging_station_base_cost>5900000</charging_station_base_cost>
                     <charging_point_cost_slow>2200000</charging_point_cost_slow>

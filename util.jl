@@ -239,14 +239,14 @@ end
 #=
     the preprocessing procedure
 =#
-function get_all_requests_feasible_paths(requests_list::DataFrame, sol::Solution)
-    paths = DataFrame(req=Integer[], origin_station=Integer[], destination_station=Integer[])
+function get_all_requests_feasible_paths(requests_list::DataFrame, stations::Vector{T}, maximum_walking_time) where T<: Int
+    paths = DataFrame(req=Integer[], origin_station=Integer[], destination_station=Integer[], start_driving_time = [], arriving_time = [], Rev = [])
 
     for req in eachrow(requests_list)
 
         print_preprocessing && println("we are with req ", req.reqId)
         #check all possible starting station
-        for origin_station_id in sol.open_stations_ids
+        for origin_station_id in stations
 
             walking_time_to_origin_station = get_walking_time(req.ON, origin_station_id)
             print_preprocessing && println("--> walking duration from ", req.ON, " to the station $origin_station_id is $walking_time_to_origin_station")
@@ -255,7 +255,7 @@ function get_all_requests_feasible_paths(requests_list::DataFrame, sol::Solution
 
                 print_preprocessing && println("---->the origin station $origin_station_id is accesible")
                 #check the ending station
-                for destination_station_id in sol.open_stations_ids
+                for destination_station_id in stations
                     if origin_station_id != destination_station_id
                         walking_time_to_destination_node = get_walking_time(destination_station_id, req.DN)
                         print_preprocessing && println("---->walking duration from station $destination_station_id to distination node ", req.DN, " is $walking_time_to_destination_node")
@@ -270,7 +270,9 @@ function get_all_requests_feasible_paths(requests_list::DataFrame, sol::Solution
                             # check the total length of the trip constraints
                             if total_time_for_trip <= 1.1 * get_trip_duration(req.ON, req.DN)
                                 print_preprocessing && println("---------->the trip is accepted")
-                                push!(paths, (req.reqId, origin_station_id, destination_station_id))
+                                start_time = walking_time_to_origin_station + req.ST * 5 # as the times in the request file representes the time slots
+                                arriving_time = start_time + get_trip_duration(origin_station_id, destination_station_id)
+                                push!(paths, (req.reqId, origin_station_id, destination_station_id, start_time, arriving_time, req.Rev))
                             end
                         end
                     end
@@ -281,54 +283,6 @@ function get_all_requests_feasible_paths(requests_list::DataFrame, sol::Solution
     end
     paths
 end
-
-#=
-    the preprocessing procedure but affect to each request her list of feasible solutions
-=#
-function get_each_requests_feasible_paths(requests_list::DataFrame, sol::Solution)
-    paths = DataFrame[]
-    #paths = DataFrame(req=Integer[], origin_station=Integer[], destination_station=Integer[])
-
-    for req in eachrow(requests_list)
-        current_request_feasible_paths = DataFrame(origin_station=Integer[], destination_station=Integer[])
-        
-        print_preprocessing && println("we are with req ", req.reqId)
-        #check all possible starting station
-        for origin_station_id in sol.open_stations_ids
-
-            walking_time_to_origin_station = get_walking_time(req.ON, origin_station_id)
-            print_preprocessing && println("--> walking duration from ", req.ON, " to the station $origin_station_id is $walking_time_to_origin_station")
-            #check accessibilty to the origin station (walking time)
-            if walking_time_to_origin_station <= maximum_walking_time
-
-                print_preprocessing && println("---->the origin station $origin_station_id is accesible")
-                #check the ending station
-                for destination_station_id in sol.open_stations_ids
-
-                    walking_time_to_destination_node = get_walking_time(destination_station_id, req.DN)
-                    print_preprocessing && println("---->walking duration from station $destination_station_id to distination node ", req.DN, " is $walking_time_to_destination_node")
-
-                    if walking_time_to_destination_node <= maximum_walking_time
-
-                        print_preprocessing && println("------>the destination node is accesible from the station $destination_station_id")
-                        #check the total length
-                        trip_duration = get_trip_duration(origin_station_id, destination_station_id)
-                        total_time_for_trip = walking_time_to_destination_node + walking_time_to_origin_station + trip_duration
-                        print_preprocessing && println("-------->the total trip duration considering start station $origin_station_id and destination station $destination_station_id is $total_time_for_trip")
-                        # check the total length of the trip constraints
-                        if total_time_for_trip <= 1.1 * get_trip_duration(req.ON, req.DN)
-                            print_preprocessing && println("---------->the trip is accepted")
-                            push!(current_request_feasible_paths, (origin_station_id, destination_station_id))
-                        end
-                    end
-                end
-            end
-        end
-        push!(paths, current_request_feasible_paths)
-    end
-    requests_list.feasible_paths = paths
-end
-
 
 function get_walking_time(id_node1, id_node2)
         #= 
@@ -344,8 +298,6 @@ function get_walking_time(id_node1, id_node2)
         walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60 #converte it to minutes
         walking_time
 end
-
-
 
 function get_trip_duration(id_node1, id_node2)
     if id_node1 ∉ keys(shortest_car_paths)
@@ -546,9 +498,6 @@ function drop_car(drop_off_station_id, car_id, parking_place_id, current_time)
 
 end
 
-function see_future_requests(req)
-    return -1
-end
 
 function draw_graph_and_scenario(manhaten_city_graph, scenario)
     cols = []
@@ -608,7 +557,7 @@ function initilaize_scenario(scenario_path::String, sol::Solution)
     global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
      =#
     # preprossesing procedure 
-    global all_feasible_paths = get_all_requests_feasible_paths(scenario, sol)
+    global all_feasible_paths = get_all_requests_feasible_paths(scenario, sol.open_stations_ids, maximum_walking_time)
     if !online_request_serving
         all_feasible_paths = all_feasible_paths[sol.selected_paths, :]
     end
