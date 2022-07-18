@@ -15,7 +15,8 @@ global scenario_path = "Data/Scenarios_1000_greaterthan2/Output1000_1.txt"
 global maximum_walking_time = 5 # in min
 global walking_speed = 1.34 # m/s
 global driving_speed =  50 #Km/h
-
+global time_slot_length = 5 # min
+global work_with_time_slot = true
 
 #= 
 # test parameters
@@ -37,7 +38,7 @@ global driving_speed = 0.06 #(1 link by 1 min)
 
 #############################################################################
 
-global online_request_serving = true # true if we consider the requests by their arrival order
+global online_request_serving = false # true if we consider the requests by their arrival order
 global penality = -10^6 # if the solution is infeasible so we return this penality
 
 #different status for the car
@@ -53,7 +54,7 @@ global const P_OCCUPIED = 3
 # printing parameters
 global print_preprocessing = false
 
-global print_simulation = true
+global print_simulation = false
 
 global cost_factor = 10^6 # or 10^5
 
@@ -67,4 +68,8 @@ global vehicle_specific_values = Dict{car_type, Any}(   Smart_ED => Dict(:batter
                                                             :fast_charging_rate=>38400, :car_cost=>29000,
                                                             :α => 126.33, :β=>0.52, :γ => 1000),# recalculate these values
                                                             )
+
+function set_online_mode(mode::Bool)
+    global online_request_serving = mode
+end
 

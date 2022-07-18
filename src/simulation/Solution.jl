@@ -41,8 +41,8 @@ Station(station_node_id::Integer, initial_cars_number::Integer, initial_id::Inte
     
     cars = DataFrame(car_id = collect(id:id+initial_cars_number-1), car_type = [Smart_ED for i in 1:initial_cars_number],
                     status = CAR_PARKED .* ones(Integer, initial_cars_number),
-                    last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = zeros(initial_cars_number),
-                    start_reservation_time = zeros(initial_cars_number), pending_reservation = zeros(initial_cars_number), expected_arrival_time = zeros(initial_cars_number))
+                    last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = NaN * ones(initial_cars_number),
+                    start_reservation_time = NaN * ones(initial_cars_number), pending_reservation = zeros(initial_cars_number), expected_arrival_time = NaN * ones(initial_cars_number))
     
     #create the parking places
     parking_places = DataFrame(p_id = collect(1:total_parking_places), 
