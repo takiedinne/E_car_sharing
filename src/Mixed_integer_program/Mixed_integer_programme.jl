@@ -1,7 +1,7 @@
 
  time_slot_length = 5 # min 
- scenario_path_list = ["Data/Scenarios_1000_greaterthan2/Output1000_1.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_2.txt",
+ scenario_path_list = ["Data/Scenarios_1000_greaterthan2/Output1000_1.txt" ,
+     "Data/Scenarios_1000_greaterthan2/Output1000_2.txt"#=,
      "Data/Scenarios_1000_greaterthan2/Output1000_3.txt",
      "Data/Scenarios_1000_greaterthan2/Output1000_4.txt",
      "Data/Scenarios_1000_greaterthan2/Output1000_5.txt",
@@ -9,10 +9,10 @@
      "Data/Scenarios_1000_greaterthan2/Output1000_7.txt",
      "Data/Scenarios_1000_greaterthan2/Output1000_8.txt",
      "Data/Scenarios_1000_greaterthan2/Output1000_9.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_10.txt"]
+     "Data/Scenarios_1000_greaterthan2/Output1000_10.txt" =#]
 
  J = get_potential_locations() #set of potentiel station
- stations_idx = Dict((J[i] => i) for i in 1:length(J)) # useful to get the index of station inside J vector
+ stations_idx = Dict((J[i] => i) for i in eachindex(J)) # useful to get the index of station inside J vector
  f_j = [get_prop(manhaten_city_graph, i, :charging_station_base_cost) for i in J] # fixed cost of each station
  g = vehicle_specific_values[Smart_ED][:car_cost] # the cost of purchasing the car 
  C_j = [get_prop(manhaten_city_graph, j, :max_number_of_charging_points) for j in J] # the capacity of each station
@@ -21,12 +21,12 @@
  q_s = [1] # the probabilty of each scenario here we are only consedring  one scenario
 
  β = vehicle_specific_values[Smart_ED][:battery_capacity] # battery capacity
- δ_ij = hcat([[get_trip_battery_consumption(J[i], J[j], Smart_ED) * β / 100 for i in 1:length(J)] for j in 1:length(J)]...) # batteru usage between the stations
+ δ_ij = hcat([[get_trip_battery_consumption(J[i], J[j], Smart_ED) * β / 100 for i in eachindex(J)] for j in eachindex(J)]...) # batteru usage between the stations
 
- d_ij = hcat([[get_trip_duration(J[i], J[j]) for i in 1:length(J)] for j in 1:length(J)]...) # driving time between stations
- #d_w = hcat([[get_walking_time(i, J[j]) for i in 1:nv(manhaten_city_graph)] for j in 1:length(J)]...)# walking time between each node and each station
+ d_ij = hcat([[get_trip_duration(J[i], J[j]) for i in eachindex(J)] for j in eachindex(J)]...) # driving time between stations
+ #d_w = hcat([[get_walking_time(i, J[j]) for i in 1:nv(manhaten_city_graph)] for j in eachindex(J)]...)# walking time between each node and each station
  #CSV.write("walking_time.csv", Tables.table(d_w), writeheader=false)
- dw_ij = readdlm("Data/MIP/walking_time.csv", ',', Float64)
+ dw_ij = readdlm(project_path("Data/MIP/walking_time.csv"), ',', Float64)
  β_w = 5 # maximum allowed walking time
 
  charging_rate = vehicle_specific_values[Smart_ED][:fast_charging_rate]
@@ -48,14 +48,15 @@ function create_solution_for_simulation(sol_df::DataFrame)
 
     return Solution(open_stations_ids, initial_car_number, selected_paths)
 end
-function get_solutions()
 
+function get_solutions()
+    
     scenario_counter = 1
     for path in scenario_path_list
 
         println("sceario [$scenario_counter]: start working with scenario ")
         scenario_list = [scenario_as_dataframe(path)]
-        for i in 1:length(scenario_list)
+        for i in eachindex(scenario_list)
             scenario_list[i].scenarioId = i .* ones(Int, nrow(scenario_list[i]))
         end
 
@@ -65,7 +66,7 @@ function get_solutions()
 
         Hs = [get_all_requests_feasible_paths(scenario, J, β_w) for scenario in scenario_list]# all feasible paths
         #add scenario id 
-        for i in 1:length(Hs)
+        for i in eachindex(Hs)
             Hs[i].scenario_id = i .* ones(Int, nrow(Hs[i]))
         end
         H = vcat(Hs...)
@@ -101,9 +102,9 @@ function get_solutions()
             mip = read_from_file("Data/MIP/programs_file/E_carsharing_mip_scenario_$scenario_counter.mof.json")
         else
             @variable(mip, u_h[1:nrow(H)], Bin) # u_h 1 if the trip in H is used 0 otherwise
-            @variable(mip, L_ts[1:length(J), 1:length(T), 1:length(S)] >= 0, Int)
-            @variable(mip, L_0[1:length(J)], Int)
-            @variable(mip, y[1:length(J)], Bin)
+            @variable(mip, L_ts[eachindex(J), eachindex(T), eachindex(S)] >= 0, Int)
+            @variable(mip, L_0[eachindex(J)], Int)
+            @variable(mip, y[eachindex(J)], Bin)
         
             # List constraints
         
@@ -116,33 +117,33 @@ function get_solutions()
             @constraint(mip, c3_2[i=1:nrow(H)], u_h[i] <= y[stations_idx[H.destination_station[i]]])
         
             #constraint (4)
-            @constraint(mip, c4[j=1:length(J), s=1:length(S), t=1:length(T)], sum(b[h, j, t] * u_h[h] for h in findall(H.scenario_id .== s)) <= L_ts[j, t, s])
+            @constraint(mip, c4[j=eachindex(J), s=eachindex(S), t=eachindex(T)], sum(b[h, j, t] * u_h[h] for h in findall(H.scenario_id .== s)) <= L_ts[j, t, s])
         
             #constraint (5)
-            @constraint(mip, c5[j=1:length(J), s=1:length(S), t=1:length(T)],
+            @constraint(mip, c5[j=eachindex(J), s=eachindex(S), t=eachindex(T)],
                 L_ts[j, t, s] + sum((μ[h, j, t] - b[h, j, t]) * u_h[h]
                                     for h in findall(H.scenario_id .== s)) <= C_j[j] * y[j])
         
             #constraint (6)
-            @constraint(mip, c6[j=1:length(J), s=1:length(S), t=2:length(T)], L_ts[j, t, s] == L_ts[j, t-1, s] + sum((λ[h, j, t] - b[h, j, t-1]) * u_h[h] for h in findall(H.scenario_id .== s)))
+            @constraint(mip, c6[j=eachindex(J), s=eachindex(S), t=2:length(T)], L_ts[j, t, s] == L_ts[j, t-1, s] + sum((λ[h, j, t] - b[h, j, t-1]) * u_h[h] for h in findall(H.scenario_id .== s)))
         
             #constraint (7)
-            @constraint(mip, c7[j=1:length(J), s=1:length(scenario_list)], L_ts[j, 1, s] == L_0[j])
+            @constraint(mip, c7[j=eachindex(J), s=eachindex(scenario_list)], L_ts[j, 1, s] == L_0[j])
         
             #constraint (8)
-            @constraint(mip, c8_1[j=1:length(J), t=1:length(T), s=1:length(scenario_list)], L_ts[j, t, s] <= C_j[j] * y[j])
-            @constraint(mip, c8_2[j=1:length(J), t=1:length(T), s=1:length(scenario_list)], L_ts[j, t, s] >= 0)
+            @constraint(mip, c8_1[j=eachindex(J), t=eachindex(T), s=eachindex(scenario_list)], L_ts[j, t, s] <= C_j[j] * y[j])
+            @constraint(mip, c8_2[j=eachindex(J), t=eachindex(T), s=eachindex(scenario_list)], L_ts[j, t, s] >= 0)
         
             #constraint (9)
-            @constraint(mip, c9[j=1:length(J)], L_0[j] >= 0)
+            @constraint(mip, c9[j=eachindex(J)], L_0[j] >= 0)
         
             #constraint (10) and (11) are precised whene defining the variables
         
         
             # the objective function
-            @objective(mip, Max, sum(q_s[s] * sum(H.Rev[h] * u_h[h] for h in findall(H.scenario_id .== s)) for s in 1:length(S)) -
-                                 sum(f_j[j] * y[j] for j in 1:length(J)) / cost_factor -
-                                 g * sum(L_0[j] for j in 1:length(J)) / cost_factor)
+            @objective(mip, Max, sum(q_s[s] * sum(H.Rev[h] * u_h[h] for h in findall(H.scenario_id .== s)) for s in eachindex(S)) -
+                                 sum(f_j[j] * y[j] for j in eachindex(J)) / cost_factor -
+                                 g * sum(L_0[j] for j in eachindex(J)) / cost_factor)
         
         
             #save the programme
@@ -167,7 +168,7 @@ function get_solutions()
     end
 
     println("Saving the solutions")
-    for i in 1:length(solution_list)
+    for i in eachindex(solution_list)
         serialize("Data/MIP/solutions/solution_$i.jls", solution_list[i])
     end
 

@@ -500,19 +500,24 @@ function draw_graph_and_scenario(manhaten_city_graph, scenario)
     f
 end
 
-function initilaize_scenario(scenario_path::String, sol::Solution)
+function initialize_scenario(scenario_path::String)
     # construct the requests lists 
-    scenario = scenario_as_dataframe(scenario_path)
-    #= global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
-    global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
-     =#
-    # preprossesing procedure 
-    global all_feasible_paths = get_all_requests_feasible_paths(scenario, get_potential_locations(), maximum_walking_time)
+    sc = scenario_as_dataframe(scenario_path)
     
-    selected_paths = !online_request_serving ? all_feasible_paths[sol.selected_paths, :] : all_feasible_paths
+    global all_feasible_paths_scenario
+    # preprossesing procedure
+    afp = get_all_requests_feasible_paths(sc, get_potential_locations(), maximum_walking_time) 
+    push!(all_feasible_paths_scenario, afp ) 
+    #global all_feasible_paths = get_all_requests_feasible_paths(scenario, get_potential_locations(), maximum_walking_time)
+    
+    #selected_paths = !online_request_serving ? all_feasible_paths[sol.selected_paths, :] : all_feasible_paths
 
     # put each feasible path beside its request
-    scenario.feasible_paths = [filter( x-> x.req == i, selected_paths) for i in scenario.reqId]
+    #scenario.feasible_paths = [filter( x-> x.req == i, selected_paths) for i in scenario.reqId]
+    sc # return
+end
 
-    scenario # return
+function initialize_scenarios(scenario_idx::Array{T,1}) where T <: Int
+    global scenarios_paths 
+    global scenario_list = [initialize_scenario(scenarios_paths[i]) for i in scenario_idx]
 end

@@ -1,15 +1,14 @@
 #=
     this file regroups all the general parameters for the simulation
 =#
+project_path(parts...) = normpath(joinpath(@__DIR__, "../..", parts...))
 
 # Different File paths
-global all_request_details_path = "Data/trips_ML_daily_greaterthan2_with_revenue&minutes_backup.txt"
+global all_request_details_path = project_path("Data/trips_ML_daily_greaterthan2_with_revenue&minutes_backup.txt")
 
-global Manhatten_network_details_file = "Data/Instances/manhattan-long-trips.xml" #the path of the file which contains the manhatten data
-global Manhatten_network_Metagraph_file = "Data/manhatten_graph.mg"
+global Manhatten_network_details_file = project_path("Data/Instances/manhattan-long-trips.xml") #the path of the file which contains the manhatten data
+global Manhatten_network_Metagraph_file = project_path("Data/manhatten_graph.mg")
 
-# the file which contains the scenario details (that's need to move from here)
-global scenario_path = "Data/Scenarios_1000_greaterthan2/Output1000_1.txt"
 #global scenario_path = "Data/Scenarios_1000_greaterthan2/1test_scenario.txt"
 #general parameters for the simulation
 global maximum_walking_time = 5 # in min
@@ -18,25 +17,11 @@ global driving_speed =  50 #Km/h
 global time_slot_length = 5 # min
 global work_with_time_slot = true
 
-#= 
-# test parameters
-global all_request_details_path = "Data/trips_ML_daily_greaterthan2_with_revenue&minutes.txt"
-
-global Manhatten_network_details_file = "Data/Instances/manhattan-long-trips.xml" #the path of the file which contains the manhatten data
-global Manhatten_network_Metagraph_file = "Data/test_graph.mg"
-
 # the file which contains the scenario details (that's need to move from here)
-global scenario_path = "Data/Scenarios_1000_greaterthan2/1test_scenario.txt"
+global scenario_path = project_path("Data/Scenarios_1000_greaterthan2/Output1000_1.txt") #deprecated not used anymore
+global scenarios_paths = project_path.("Data/Scenarios_1000_greaterthan2/" .* filter!(x-> startswith(x,"Out" ), readdir(project_path("Data/Scenarios_1000_greaterthan2")) ))
+global scenario_list = Array{DataFrame, 1}()
 
-#general parameters for the simulation
-global maximum_walking_time = 5 # in min
-global walking_speed = 1/300 #( 1 link by 1 min) 
-global driving_speed = 0.06 #(1 link by 1 min) 
-
-#global walking_speed = 1.34 # m/s
-#global driving_speed =  50 #Km /have =#
-
-#############################################################################
 
 global online_request_serving = false # true if we consider the requests by their arrival order
 global penality = -10^6 # if the solution is infeasible so we return this penality
@@ -69,7 +54,8 @@ global vehicle_specific_values = Dict{car_type, Any}(   Smart_ED => Dict(:batter
                                                             :α => 126.33, :β=>0.52, :γ => 1000),# recalculate these values
                                                             )
 
-function set_online_mode(mode::Bool)
+
+                                                            function set_online_mode(mode::Bool)
     global online_request_serving = mode
 end
 
