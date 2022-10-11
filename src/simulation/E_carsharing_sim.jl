@@ -25,12 +25,9 @@ global all_feasible_paths_scenario = Array{DataFrame,1}()
 global all_feasible_paths 
 
 global failed = false #for the offline mode it is needed to stop the simulation
+global revenues = 0 #the revenue of serving customers
 
-global revenues = 0 #
-
-global stations = Array{Station, 1}() # list of stations
-
-global scenario # the requests lists
+global stations = Array{Station, 1}() # list of open_stations_ids
 
 @resumable function request_arrival_process_offline_mode(env::Environment, scenario::DataFrame, sol::Solution)
     #browse all the requests (the requests are sorted according to their arrival time)
@@ -125,12 +122,10 @@ end
     
     #some information
     walking_duration = get_walking_time(req.ON, sol.open_stations_ids[pickup_station_id])
-    walking_duration = work_with_time_slot ? ceil(Integer, walking_duration / time_slot_length) : walking_duration
-
+    
     start_walking_time = now(env)
 
     driving_duration = get_trip_duration(sol.open_stations_ids[pickup_station_id], sol.open_stations_ids[drop_off_station_id])
-    driving_duration = work_with_time_slot ? ceil(Integer, driving_duration / time_slot_length) : driving_duration
     
     print_simulation && println("Customer [", req.reqId, "]: the request is accepted") #
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
@@ -218,13 +213,11 @@ end
     
     #some information
     walking_duration = get_walking_time(req.ON, sol.open_stations_ids[pickup_station_id])
-    walking_duration = work_with_time_slot ? ceil(Integer, walking_duration / time_slot_length) : walking_duration
-
+    
     start_walking_time = now(env)
 
     driving_duration = get_trip_duration(sol.open_stations_ids[pickup_station_id], sol.open_stations_ids[drop_off_station_id])
-    driving_duration = work_with_time_slot ? ceil(Integer, driving_duration / time_slot_length) : driving_duration
-
+    
     #book the trip (the car + parking palce ,etc) only for the 
     if online_request_serving
         book_trip(sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
@@ -397,10 +390,9 @@ function initialize_sim(sol::Solution, scenario::DataFrame)
 end
 
 function E_carsharing_sim(sol::Solution, scenario_id::Integer)
-    # check the feasibilty of the solution
-    scenario =  scenario_list[scenario_id]
+    current_scenario =  scenario_list[i]
     global all_feasible_paths = all_feasible_paths_scenario[scenario_id]
-
+    #check the feasibilty of the solution
     if is_feasible_solution(sol)
         
         initialize_sim(sol, scenario)
@@ -412,18 +404,14 @@ function E_carsharing_sim(sol::Solution, scenario_id::Integer)
             @process request_arrival_process_offline_mode(sim, scenario, sol)
         end
         run(sim)
+        
         if failed
             print_simulation && printstyled(stdout, "The simulation is stopped because a request couldn't be served\n", color=:light_red)
             return penality
         else
             # count the objective function
             print_simulation && println("counting the objective function")
-            total_cars_cost = 0
-            for i in 1:length(stations)
-                if nrow(stations[i].cars) > 0
-                    total_cars_cost += sum([vehicle_specific_values[stations[i].cars.car_type[j]][:car_cost] for j in 1:nrow(stations[i].cars)])
-                end
-            end
+            total_cars_cost = sum([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)])
         
             #= total_station_cost = sum([station.charging_station_base_cost + 
                                         station.max_number_of_charging_points * station.charging_point_cost_fast

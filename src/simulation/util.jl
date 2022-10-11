@@ -114,7 +114,7 @@ end
     inputs: 
         @scenario_path => the path of the file wich contain the scenarion details
     output:
-    scenario_df => list of requests with ther details as dataFrame
+        scenario_df => list of requests with ther details as dataFrame
 =#
 function scenario_as_dataframe(scenario_path::String)
     # the scenario file contains only the id of the requests
@@ -134,25 +134,30 @@ function scenario_as_dataframe(scenario_path::String)
     return scenario_df
 end
 
-function get_trip_info_for_request(req, sol::Solution, current_time) # information to return 
-    pickup_station_id = -1 # the id of the station (inside the solution object) where we can take a car
-    drop_off_station_id = -1 # the id the station (inside the solution object) where we can drop off the car
-    selected_car_id = -1 # the id of the car to be used to perform the trip
-    parking_place_id = -1 # the id of the parking place in the drop off station
+#=
+    description: GET ALL THE INFORMATION RELATIVE TO THE REQUEST
+    inputs: 
+        @req => the request to be served
+        @sol => the solution to get the list of the opened stations
+        @current_time => the surrent time
+    output:
+        pickup_station_id => the id of the pickup station 
+        drop_off_station_id => the id the drop off station
+        selected_car_id => the id of the car to be used to perform the trip
+        parking_place_id => the id of the parking place in the drop off station
+=#
+function get_trip_info_for_request(req, sol::Solution, current_time) 
+    # information to return 
+    pickup_station_id = -1
+    drop_off_station_id = -1
+    selected_car_id = -1
+    parking_place_id = -1
 
-    #= if !online_request_serving
-        #check if the request is selected to be served according to the decision variables
-        paths = filter(row -> row.req == req.reqId, all_feasible_paths[sol.selected_paths, :])
-
-    else
-        #get the path 
-        paths = paths = filter(row -> row.req == req.reqId, all_feasible_paths)
-    end =#
-    paths = req.feasible_paths
+    paths = req.feasible_paths 
+    # if we are in the offline mode necessarilly paths contains only one path 
+    # because the decision variables specify the path to take for each request
 
     for path in eachrow(paths)
-        # if we are in the offline mode necessarilly paths contains only one path 
-
         # reset the information to be returned
         selected_car_id = -1 # the id of the car to be used to perform the trip
         parking_place_id = -1 # the id of the parking place in the drop off station
@@ -160,15 +165,14 @@ function get_trip_info_for_request(req, sol::Solution, current_time) # informati
         drop_off_station_id = findfirst(in(path.destination_station), sol.open_stations_ids)
 
         battery_level_needed = get_battery_level_needed(path) # always 100%
-        expected_start_riding_time = work_with_time_slot ? ceil(Integer, current_time + get_walking_time(req.ON, path.origin_station[1])) : current_time + get_walking_time(req.ON, path.origin_station[1])
+        expected_start_riding_time = current_time + get_walking_time(req.ON, path.origin_station[1])
         
-
         #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
         available_car_df = filter(row -> row.status == CAR_PARKED ||
                 (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_start_riding_time),
             stations[pickup_station_id].cars)
         if !isempty(available_car_df)
-            #check the battery consumption constraint
+            
             # first we count the actual battery levels
             refrech_battery_levels(pickup_station_id, current_time) # count the actual battery levels
 
@@ -201,7 +205,6 @@ function get_trip_info_for_request(req, sol::Solution, current_time) # informati
 
         #check the availability of the parking place (free places + expected to be free places)
         expected_arrival_time = expected_start_riding_time + get_trip_duration(path.origin_station[1], path.destination_station[1])
-        expected_arrival_time = work_with_time_slot ? ceil(Integer, expected_arrival_time) : expected_arrival_time
         # first we group all the information in one Dataframe
         parking_and_cars_df = leftjoin(stations[drop_off_station_id].parking_places, stations[drop_off_station_id].cars, on=:cars => :car_id, makeunique=true)
 
@@ -285,19 +288,23 @@ function get_all_requests_feasible_paths(requests_list::DataFrame, stations::Vec
 end
 
 function get_walking_time(id_node1, id_node2)
-        
         if id_node1 ∉ keys(shortest_walking_paths)
             merge!(shortest_walking_paths, Dict(id_node1 => dijkstra_shortest_paths(non_directed_manhaten_city_graph, [id_node1])))
         end
-        walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60 #converte it to minutes
+        walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60  
+        work_with_time_slot && (walking_time = ceil(Integer, walking_time / time_slot_length ))
         walking_time
 end
 
+#= 
+    description : get the driving time between wo nodes
+=#
 function get_trip_duration(id_node1, id_node2)
     if id_node1 ∉ keys(shortest_car_paths)
         merge!(shortest_car_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_graph, [id_node1])))
     end
     driving_duration = shortest_car_paths[id_node1].dists[id_node2] / driving_speed / 1000 * 60 # convert it to minutes 
+    work_with_time_slot && (driving_duration = ceil(Integer, driving_duration/ time_slot_length))
     driving_duration
 end
 
@@ -332,7 +339,7 @@ function get_battery_level_needed(path)
 end
 
 #=
-    this function calculate the expected battery level at time @btime
+    this function calculate the expected battery level at time @time (input)
 =#
 function get_expected_battery_levels(available_cars::DataFrame, time)
     expected_battery_level = copy(available_cars.last_battery_level)
@@ -341,10 +348,8 @@ function get_expected_battery_levels(available_cars::DataFrame, time)
         current_car = available_cars[i, :]
         #count the expected battery level 
         if current_car.status in [CAR_PARKED, CAR_RESERVED]
-            charging_time = (time - current_car.start_charging_time) * 60 # convert it to seconds
-            if work_with_time_slot
-                charging_time *= time_slot_length
-            end
+            charging_time = (time - current_car.start_charging_time) * 60 * (work_with_time_slot ? time_slot_length : 1)
+            
             battery_capacity = vehicle_specific_values[current_car.car_type][:battery_capacity]
             charging_rate = vehicle_specific_values[current_car.car_type][:fast_charging_rate]
 
@@ -364,10 +369,8 @@ function refrech_battery_levels(station_id::Integer, current_time)
     for car in eachrow(stations[station_id].cars)
 
         if car.status in [CAR_PARKED, CAR_RESERVED] && car.last_battery_level < 100  # in both these cases the cars is supposed to be plugged-in the charger spot
-            charging_time = (current_time - car.start_charging_time) * 60 # convert it to seconds
-            if work_with_time_slot
-                charging_time *= time_slot_length
-            end
+            charging_time = (current_time - car.start_charging_time) * 60 * (work_with_time_slot ? time_slot_length : 1)
+
             battery_capacity = vehicle_specific_values[car.car_type][:battery_capacity]
             charging_rate = vehicle_specific_values[car.car_type][:fast_charging_rate]
 

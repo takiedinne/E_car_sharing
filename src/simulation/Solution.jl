@@ -1,5 +1,3 @@
-@enum car_type Smart_ED Mitsubishi_iMIEV Nissan_LEAF
-
 
 mutable struct Station
     cars::DataFrame 
@@ -67,7 +65,7 @@ Solution() = Solution([], [], [])
     generate a random solution:
         1- decide how much station to open if it is not precised in @open_stations_number
         2- open random stations 
-        3- set random initila number of cars for each station
+        3- set random initial number of cars for each station
     inputs:
         @open_stations_number (optional): the number of station to open
     outputs:
