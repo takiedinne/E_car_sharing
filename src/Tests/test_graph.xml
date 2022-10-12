@@ -296,6 +296,7 @@
                 </custom>
             </node>
        </nodes>
+       
        <links symetrics ="false">
             <link tail="0" head="1" id="0">
                 <length>1</length>
@@ -482,70 +483,70 @@
                 </custom>
             </link>
             <link tail="5" head="10" id="22">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="6" head="11" id="23">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>1</maxSpeed>
                 </custom>
             </link>
             <link tail="7" head="12" id="24">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="8" head="13" id="25">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="9" head="14" id="26">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>1</maxSpeed>
                 </custom>
             </link>
             <link tail="10" head="15" id="27">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="11" head="16" id="28">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="12" head="17" id="29">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>1</maxSpeed>
                 </custom>
             </link>
             <link tail="13" head="18" id="30">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="14" head="19" id="31">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
@@ -602,28 +603,28 @@
                 </custom>
             </link>
             <link tail="11" head="6" id="39">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="18" head="13" id="41">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="19" head="18" id="42">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>
                 </custom>
             </link>
             <link tail="23" head="18" id="40">
-                <length>200</length>
+                <length>1</length>
                 <custom>
                     <frc>3</frc>
                     <maxSpeed>50</maxSpeed>

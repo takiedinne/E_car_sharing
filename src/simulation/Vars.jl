@@ -1,3 +1,4 @@
+test_vars = false
 #=
     this file regroups all the general parameters for the simulation
 =#
@@ -21,18 +22,33 @@ project_path give you the absulte path for each relative path in inputs
 =#
 project_path(parts...) = normpath(joinpath(@__DIR__, "../..", parts...))
 
-# Different File paths
-global all_request_details_path = project_path("Data/trips_ML_daily_greaterthan2_with_revenue&minutes_backup.txt")
-global Manhatten_network_details_file = project_path("Data/Instances/manhattan-long-trips.xml") #the path of the file which contains the manhatten data
-global Manhatten_network_Metagraph_file = project_path("Data/manhatten_graph.mg")
-global scenarios_paths = project_path.("Data/Scenarios_1000_greaterthan2/" .* filter!(x-> startswith(x,"Out" ), readdir(project_path("Data/Scenarios_1000_greaterthan2")) ))
-global scenario_list = Array{DataFrame, 1}() # contain all scenario instances as dataframe
+if test_vars
+    # Different File paths
+    global all_request_details_path = project_path("Data/test_trips.txt")
+    global Manhatten_network_details_file = project_path("Tests/test_graph.xml") #the path of the file which contains the manhatten data
+    global Manhatten_network_Metagraph_file = project_path("Data/test_graph.mg")
+    global scenarios_paths = project_path.("Data/Scenarios_test/" .* filter!(x -> startswith(x, "1test"), readdir(project_path("Data/Scenarios_test"))))
+    
+    #general parameters for the simulation:
+    global maximum_walking_time = 1 # in min
+    global walking_speed = 1/60 # m/s
+    global driving_speed =  1/60 #Km/h
+    global time_slot_length = 1 # min
 
-#general parameters for the simulation:
-global maximum_walking_time = 5 # in min
-global walking_speed = 1.34 # m/s
-global driving_speed =  50 #Km/h
-global time_slot_length = 5 # min
+else
+    # Different File paths
+    global all_request_details_path = project_path("Data/trips_ML_daily_greaterthan2_with_revenue&minutes.txt")
+    global Manhatten_network_details_file = project_path("Data/Instances/manhattan-long-trips.xml") #the path of the file which contains the manhatten data
+    global Manhatten_network_Metagraph_file = project_path("Data/manhatten_graph.mg")
+    global scenarios_paths = project_path.("Data/Scenarios_1000_greaterthan2/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Scenarios_1000_greaterthan2"))))
+    
+    #general parameters for the simulation:
+    global maximum_walking_time = 5 # in min
+    global walking_speed = 1.34 # m/s
+    global driving_speed =  50 #Km/h
+    global time_slot_length = 5 # min
+
+end
 
 
 #different status for the car:

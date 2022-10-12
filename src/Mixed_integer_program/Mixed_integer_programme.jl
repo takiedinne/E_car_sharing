@@ -1,61 +1,52 @@
+time_slot_length = 5 # min 
+scenario_path_list = ["Data/Scenarios_1000_greaterthan2/Output1000_1.txt"#= ,
+    "Data/Scenarios_1000_greaterthan2/Output1000_2.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_3.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_4.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_5.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_6.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_7.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_8.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_9.txt",
+    "Data/Scenarios_1000_greaterthan2/Output1000_10.txt" =#]
 
- time_slot_length = 5 # min 
- scenario_path_list = ["Data/Scenarios_1000_greaterthan2/Output1000_1.txt" ,
-     "Data/Scenarios_1000_greaterthan2/Output1000_2.txt"#=,
-     "Data/Scenarios_1000_greaterthan2/Output1000_3.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_4.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_5.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_6.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_7.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_8.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_9.txt",
-     "Data/Scenarios_1000_greaterthan2/Output1000_10.txt" =#]
+J = get_potential_locations() #set of potentiel station
+stations_idx = Dict((J[i] => i) for i in eachindex(J)) # useful to get the index of station inside J vector
+f_j = [get_prop(manhaten_city_graph, i, :charging_station_base_cost) for i in J] # fixed cost of each station
+g = vehicle_specific_values[Smart_ED][:car_cost] # the cost of purchasing the car 
+C_j = [get_prop(manhaten_city_graph, j, :max_number_of_charging_points) for j in J] # the capacity of each station
+T = collect(Integer, 1:300) # set of time slots
+S = collect(1:1) # we are  only considering one scenario at a time
+q_s = [1] # the probabilty of each scenario here we are only consedring  one scenario
 
- J = get_potential_locations() #set of potentiel station
- stations_idx = Dict((J[i] => i) for i in eachindex(J)) # useful to get the index of station inside J vector
- f_j = [get_prop(manhaten_city_graph, i, :charging_station_base_cost) for i in J] # fixed cost of each station
- g = vehicle_specific_values[Smart_ED][:car_cost] # the cost of purchasing the car 
- C_j = [get_prop(manhaten_city_graph, j, :max_number_of_charging_points) for j in J] # the capacity of each station
- T = collect(Integer, 1:300) # set of time slots
- S = collect(1:1) # we are  only considering one scenario at a time
- q_s = [1] # the probabilty of each scenario here we are only consedring  one scenario
+β = vehicle_specific_values[Smart_ED][:battery_capacity] # battery capacity
+δ_ij = hcat([[get_trip_battery_consumption(J[i], J[j], Smart_ED) * β / 100 for i in eachindex(J)] for j in eachindex(J)]...) # batteru usage between the stations
 
- β = vehicle_specific_values[Smart_ED][:battery_capacity] # battery capacity
- δ_ij = hcat([[get_trip_battery_consumption(J[i], J[j], Smart_ED) * β / 100 for i in eachindex(J)] for j in eachindex(J)]...) # batteru usage between the stations
+d_ij = hcat([[get_trip_duration(J[i], J[j]) for i in eachindex(J)] for j in eachindex(J)]...) # driving time between stations
+#d_w = hcat([[get_walking_time(i, J[j]) for i in 1:nv(manhaten_city_graph)] for j in eachindex(J)]...)# walking time between each node and each station
+#CSV.write("walking_time.csv", Tables.table(d_w), writeheader=false)
+dw_ij = readdlm(project_path("Data/MIP/walking_time.csv"), ',', Float64)
+β_w = 5 # maximum allowed walking time
 
- d_ij = hcat([[get_trip_duration(J[i], J[j]) for i in eachindex(J)] for j in eachindex(J)]...) # driving time between stations
- #d_w = hcat([[get_walking_time(i, J[j]) for i in 1:nv(manhaten_city_graph)] for j in eachindex(J)]...)# walking time between each node and each station
- #CSV.write("walking_time.csv", Tables.table(d_w), writeheader=false)
- dw_ij = readdlm(project_path("Data/MIP/walking_time.csv"), ',', Float64)
- β_w = 5 # maximum allowed walking time
+charging_rate = vehicle_specific_values[Smart_ED][:fast_charging_rate]
 
- charging_rate = vehicle_specific_values[Smart_ED][:fast_charging_rate]
-
- 
-
- solution_list = Array{Solution,1}()
- objective_value_list = Array{Float64,1}()
+solution_list = Array{Solution,1}()
+objective_value_list = Array{Float64,1}()
 
 function create_solution_for_simulation(sol_df::DataFrame)
     sol_y = filter(row -> occursin("y", row.x), sol_df)
     sol_u_h = filter(row -> occursin("u_h", row.x), sol_df)
     sol_L_0 = filter(row -> occursin("L_0", row.x), sol_df)
-
-    # solution fields
-    open_stations_ids = J[findall(val -> val == 1, sol_y.val)]
-    initial_car_number = sol_L_0.val[findall(val -> val == 1, sol_y.val)]
-    selected_paths = sol_u_h.val
-
-    return Solution(open_stations_ids, initial_car_number, selected_paths)
+    
+    return Solution( convert.(Bool, sol_y.val),  convert.(Int, sol_L_0.val), [convert.(Bool, sol_u_h.val)])
 end
 
 function get_solutions()
-    
     scenario_counter = 1
+    mip = Model()
     for path in scenario_path_list
-
         println("sceario [$scenario_counter]: start working with scenario ")
-        scenario_list = [scenario_as_dataframe(path)]
+        scenario_list = [requests_as_dataframe(path)]
         for i in eachindex(scenario_list)
             scenario_list[i].scenarioId = i .* ones(Int, nrow(scenario_list[i]))
         end
@@ -64,7 +55,7 @@ function get_solutions()
         K = vcat(scenario_list...) #set of all request in all scenarios
         Δ_k = [get_trip_duration(req.ON, req.DN) * 1.1 for req in eachrow(K)] #time threshold of the trip duration for each request
 
-        Hs = [get_all_requests_feasible_paths(scenario, J, β_w) for scenario in scenario_list]# all feasible paths
+        Hs = [get_feasible_paths(scenario, J, β_w) for scenario in scenario_list]# all feasible paths
         #add scenario id 
         for i in eachindex(Hs)
             Hs[i].scenario_id = i .* ones(Int, nrow(Hs[i]))
@@ -175,6 +166,8 @@ function get_solutions()
     serialize("Data/MIP/solutions/Objective_values.jls", objective_value_list)
 
     println("End traitement pass to the validation")
+
+    mip
 end
 
 

@@ -13,20 +13,19 @@ using Distances
 using StatsBase
 
 using LinearAlgebra
-#using JuMP, Gurobi
+using JuMP, Gurobi
 using Tables
 
 using DelimitedFiles
 using Serialization
 
-
-include("simulation/Solution.jl")
+include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
 include("simulation/util.jl")
 
 include("simulation/E_carsharing_sim.jl")
 
-#include("Mixed_integer_program/Mixed_integer_programme.jl")
+include("Mixed_integer_program/Mixed_integer_programme.jl")
 
 export E_carsharing_sim,
        Solution,
