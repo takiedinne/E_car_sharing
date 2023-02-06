@@ -15,7 +15,7 @@ stations_idx = Dict((J[i] => i) for i in eachindex(J)) # useful to get the index
 f_j = [get_prop(manhaten_city_graph, i, :charging_station_base_cost) for i in J] # fixed cost of each station
 g = vehicle_specific_values[Smart_ED][:car_cost] # the cost of purchasing the car 
 C_j = [get_prop(manhaten_city_graph, j, :max_number_of_charging_points) for j in J] # the capacity of each station
-T = collect(Integer, 1:300) # set of time slots
+T = collect(Int64, 1:300) # set of time slots
 S = collect(1:1) # we are  only considering one scenario at a time
 q_s = [1] # the probabilty of each scenario here we are only consedring  one scenario
 

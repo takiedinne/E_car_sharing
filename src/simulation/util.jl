@@ -190,8 +190,8 @@ end
 #=
     the preprocessing procedure
 =#
-function get_feasible_paths(requests_list::DataFrame, stations::Vector{T}, maximum_walking_time) where T<: Integer
-    paths = DataFrame(req=Integer[], origin_station=Integer[], destination_station=Integer[], start_driving_time = [], arriving_time = [], Rev = [])
+function get_feasible_paths(requests_list::DataFrame, stations::Vector{T}, maximum_walking_time) where T<: Int64
+    paths = DataFrame(req=Int64[], origin_station=Int64[], destination_station=Int64[], start_driving_time = [], arriving_time = [], Rev = [])
 
     for req in eachrow(requests_list)
 
@@ -227,6 +227,7 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{T}, maxim
                                     start_time  = ceil(Int, start_time / time_slot_length)
                                     arriving_time = start_time + ceil(Int, trip_duration / time_slot_length)
                                 end
+                                
                                 push!(paths, (req.reqId, origin_station_id, destination_station_id, start_time, arriving_time, req.Rev))
                             end
                         end
@@ -256,7 +257,7 @@ function initialize_scenario(scenario_path::String)
 
     if online_request_serving
         # link the feasible paths to their corresponding requests
-        feasible_paths_ranges = Array{Array{Integer,1}, 1}()
+        feasible_paths_ranges = Array{Array{Int64,1}, 1}()
         i = 1
         for r in 1:nrow(requests_list)
             start = nothing
@@ -273,7 +274,8 @@ function initialize_scenario(scenario_path::String)
     Scenario(requests_list, afp)
 end
 
-function initialize_scenarios(scenario_idx::Array{T,1}) where T <: Int
+function initialize_scenarios( scenario_idx::Array{Int64,1} ) where T <: Int
+    
     global scenarios_paths 
     global scenario_list = [initialize_scenario(scenarios_paths[i]) for i in scenario_idx]
 end
@@ -385,7 +387,7 @@ function get_walking_time(id_node1, id_node2)
             merge!(shortest_walking_paths, Dict(id_node1 => dijkstra_shortest_paths(non_directed_manhaten_city_graph, [id_node1])))
         end
         walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60  
-        work_with_time_slot && (walking_time = ceil(Integer, walking_time / time_slot_length ))
+        work_with_time_slot && (walking_time = ceil(Int64, walking_time / time_slot_length ))
         walking_time
 end
 
@@ -397,7 +399,7 @@ function get_trip_duration(id_node1, id_node2)
         merge!(shortest_car_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_graph, [id_node1])))
     end
     driving_duration = shortest_car_paths[id_node1].dists[id_node2] / driving_speed / 1000 * 60 # convert it to minutes 
-    work_with_time_slot && (driving_duration = ceil(Integer, driving_duration/ time_slot_length))
+    work_with_time_slot && (driving_duration = ceil(Int64, driving_duration/ time_slot_length))
     driving_duration
 end
 
@@ -409,7 +411,7 @@ function get_trip_distance(id_node1, id_node2)
     distance
 end
 
-function get_trip_battery_consumption(id_node1::Integer, id_node2::Integer, Tcar::car_type)
+function get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
     α = vehicle_specific_values[Tcar][:α]
     β = vehicle_specific_values[Tcar][:β]
     γ = vehicle_specific_values[Tcar][:γ]
@@ -461,7 +463,7 @@ end
 #=
     this function recounts the battery level of the cars in the station 
 =#
-function refrech_battery_levels(station_id::Integer, current_time)
+function refrech_battery_levels(station_id::Int64, current_time)
 
     for car in eachrow(stations[station_id].cars)
 
@@ -562,7 +564,7 @@ end
         sol:: Solution 
 =#
 function generate_random_solution(; open_stations_number=-1)
-
+    
     sol = Solution()
     potential_locations = get_potential_locations()
     #decide the number of stations to open if it is not precised by the user
@@ -577,7 +579,12 @@ function generate_random_solution(; open_stations_number=-1)
         max_number_of_charging_points = sol.open_stations_state[i] ? get_prop(manhaten_city_graph, get_potential_locations()[i], :max_number_of_charging_points) : 0 
         sol.initial_cars_number[i] = rand(0:max_number_of_charging_points)
     end
-    # I need to figure out a way to instantiate the selected paths for the offline mode
+    
+    # initialize Randomly the selected paths
+    for sc in scenario_list
+        curr_sc_selected_paths = [rand(Bool) for _ in 1:nrow(sc.feasible_paths)]
+        push!(sol.selected_paths, curr_sc_selected_paths)
+    end
     
     sol
 end
@@ -594,7 +601,7 @@ function is_feasible_solution(sol::Solution)
     #check the initial number of cars (constraint 7 and 8)
     for i in eachindex(sol.open_stations_state)
         if sol.initial_cars_number[i] > (sol.open_stations_state[i] ? get_prop(manhaten_city_graph, potential_locations[i], :max_number_of_charging_points) : 0)
-            println("the initial number of cars in the station ", potential_locations[i], " is greater the the total allowed number (or a stations contains cars despite it is closed")
+            print_simulation && println("the initial number of cars in the station ", potential_locations[i], " is greater the the total allowed number (or a stations contains cars despite it is closed")
             return false
         end
     end
@@ -606,7 +613,7 @@ function is_feasible_solution(sol::Solution)
             
             # check if the customer is served by  at most one trip (constraint 2)
             if nrow(selected_paths) != length(unique(selected_paths.req))
-                println("there is at least a customer served by more than one trip in scenario $s")
+                print_simulation && println("there is at least a customer served by more than one trip in scenario $s")
                 return false
             end
             #check if each station in the selected trips is open (constraint 3)
@@ -618,7 +625,7 @@ function is_feasible_solution(sol::Solution)
             if nrow(innerjoin(selected_paths, open_stations_df, on = :origin_station => :station_ids)) != nrow(selected_paths) ||
                 nrow(innerjoin(selected_paths, open_stations_df, on = :destination_station => :station_ids)) != nrow(selected_paths)
                 
-                println("there is at least one closed station in the feasible paths")
+                print_simulation && println("there is at least one closed station in the feasible paths")
                 return false
             end
         end
@@ -627,3 +634,8 @@ function is_feasible_solution(sol::Solution)
 
     return true
 end
+
+function get_stored_solution(sol_id=1)
+    deserialize(project_path("Data/MIP/solutions/solution_$sol_id.jls"))
+end
+

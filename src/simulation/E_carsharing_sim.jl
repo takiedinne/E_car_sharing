@@ -11,11 +11,11 @@ global non_directed_manhaten_city_graph = MetaGraph(manhaten_city_graph) # for w
 global potential_locations = [] # the index of all potential stations 
 #read all requests details
 global all_request_df = CSV.read(all_request_details_path, DataFrame)
-global scenario_list = Array{DataFrame,1}() # contain all scenario instances as dataframe
+global scenario_list  # contain all scenario instances as dataframe
 
 #initialization
-global shortest_car_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
-global shortest_walking_paths = Dict{Integer,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
+global shortest_car_paths = Dict{Int64,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
+global shortest_walking_paths = Dict{Int64,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
 
 
 #= #################################################################### =#
@@ -156,7 +156,7 @@ end
                 #double check if there is another request that can help to serve the current request
                 @yield timeout(env, 0.0, priority=-1) # put this process at the end of the heap for the current time
                 if req.reqId in [697, 714]
-                    println("find parking place second tentative $(req.reqId)")
+                    print_simulation && println("find parking place second tentative $(req.reqId)")
                 end
                 available_places_df = filter(row -> row.status == P_FREE, stations[drop_off_station_id].parking_places)
             end
@@ -350,7 +350,7 @@ function drop_car(drop_off_station_id, car_id, parking_place_id, current_time)
 
 end
 
-function initialize_sim(sol::Solution, scenario_id::Integer)
+function initialize_sim(sol::Solution, scenario_id::Int64)
     scenario = scenario_list[scenario_id]
     global failed = false
     global revenues = 0
@@ -377,7 +377,7 @@ function initialize_sim(sol::Solution, scenario_id::Integer)
     end
 end
 
-function E_carsharing_sim(sol::Solution, scenario_id::Integer)
+function E_carsharing_sim(sol::Solution, scenario_id::Int64)
     scenario = scenario_list[scenario_id]
     #check the feasibilty of the solution
     if is_feasible_solution(sol)
@@ -398,13 +398,14 @@ function E_carsharing_sim(sol::Solution, scenario_id::Integer)
         else
             # count the objective function
             print_simulation && println("counting the objective function")
-            total_cars_cost = sum([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)])
+            
+            total_cars_cost = sum(Array{Float64}([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)]))
 
             #= total_station_cost = sum([station.charging_station_base_cost + 
                                         station.max_number_of_charging_points * station.charging_point_cost_fast
                                         for station in stations]) =#
             
-            total_station_cost = sum([station.charging_station_base_cost for station in stations[sol.open_stations_state]])
+            total_station_cost = sum(Array{Float64}([station.charging_station_base_cost for station in stations[sol.open_stations_state]]))
 
             return revenues - (total_cars_cost + total_station_cost) / cost_factor
         end
@@ -412,4 +413,17 @@ function E_carsharing_sim(sol::Solution, scenario_id::Integer)
         print_simulation && println("The solution is not feasible")
         return penality
     end
+end
+function E_carsharing_sim(sol::Solution)
+    #save_sol(sol)
+    f_x  = 0
+    for i in eachindex(scenario_list)
+        f_x = E_carsharing_sim(sol, i)
+    end
+    return -1 * f_x/length(scenario_list)
+end
+
+function save_sol(sol::Solution)
+    println("save solution")
+    serialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/GIHH_V2.0/sol.jls", sol)
 end

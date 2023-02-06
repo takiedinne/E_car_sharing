@@ -34,5 +34,6 @@ export E_carsharing_sim,
        car_type,
        set_online_mode, 
        initialize_scenario,
-       initialize_scenarios
+       initialize_scenarios,
+       get_stored_solution,
 end

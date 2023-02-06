@@ -1,14 +1,17 @@
-include("../E_car_sharing.jl")
-using Main.E_car_sharing
+using E_car_sharing
 using Serialization
-using BenchmarkTools
 
-const e = Main.E_car_sharing
-#read solution 
-sol1 = deserialize("Data/MIP/solutions/solution_1.jls")
-# read the scenario
-e.initialize_scenarios([1])
+sol =  deserialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/GIHH_V2.0/sol.jls")
+initialize_scenarios([1])
+E_carsharing_sim(sol)
+sol = generate_random_solution()
 
-# run the simulations 
-f_obj = e.E_carsharing_sim(sol1, 1)
+a = 10 ^ 1000
+b = 10 ^ 100 
+a = typemax(Int128) 
 
+b = a ^(1/(2+(10/ 1000)))
+c = a ^(1/(2+(11/ 1000)))
+
+b -c 
+c -b 
