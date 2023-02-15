@@ -27,6 +27,7 @@ global revenues = 0 #the revenue of serving customers
 global stations = Array{Station,1}() # list of open_stations_state
 
 global online_selected_paths = Array{Array{Bool,1}, 1}() #useful for the online mode to see which paths is chosen
+global number_of_served_requests = 0 # a couter for the numlber of requests that the simulation served
 ################################ Online mode ####################################
 @resumable function request_arrival_process_online_mode(env::Environment, scenario::Scenario, sol::Solution)
     #browse all the requests (the requests are sorted according to their arrival time)
@@ -141,6 +142,7 @@ end
                 @process perform_the_trip_process_offline_mode(env, req, sol, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
             end
         end
+
     end
 end
 
@@ -273,6 +275,8 @@ function drop_car(drop_off_station_id, car_id, parking_place_id, current_time)
     #set the reseravtion and expected time 
     stations[drop_off_station_id].cars.start_reservation_time[car_indx] = NaN
     stations[drop_off_station_id].cars.expected_arrival_time[car_indx] = NaN
+
+    global number_of_served_requests +=1
 end
 
 function initialize_sim(sol::Solution, scenario_id::Int64)
@@ -304,52 +308,61 @@ end
 
 function E_carsharing_sim(sol::Solution, scenario_id::Int64)
     scenario = scenario_list[scenario_id]
-    #check the feasibilty of the solution
-    if is_feasible_solution(sol)
+    
+    initialize_sim(sol, scenario_id)
 
-        initialize_sim(sol, scenario_id)
-
-        sim = Simulation()
-        if online_request_serving
-            @process request_arrival_process_online_mode(sim, scenario, sol)
-        else
-            @process request_arrival_process_offline_mode(sim, scenario, sol)
-        end
-        run(sim)
-
-        if failed
-            print_simulation && printstyled(stdout, "Fatal Error: The simulation is stopped because there is a problem\n", color=:light_red)
-            return penality
-        else
-            # count the objective function
-            print_simulation && println("counting the objective function")
-            
-            total_cars_cost = sum(Array{Float64}([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)]))
-
-            #= total_station_cost = sum([station.charging_station_base_cost + 
-                                        station.max_number_of_charging_points * station.charging_point_cost_fast
-                                        for station in stations]) =#
-            
-            total_station_cost = sum(Array{Float64}([station.charging_station_base_cost for station in stations[sol.open_stations_state]]))
-
-            return revenues - (total_cars_cost + total_station_cost) / cost_factor
-        end
+    sim = Simulation()
+    if online_request_serving
+        @process request_arrival_process_online_mode(sim, scenario, sol)
     else
-        print_simulation && println("The solution is not feasible")
-        return penality
+        @process request_arrival_process_offline_mode(sim, scenario, sol)
+    end
+    run(sim)
+
+    if failed
+        print_simulation && printstyled(stdout, "Fatal Error: The simulation is stopped because there is a problem\n", color=:light_red)
+        return Inf
+    else
+        # count the objective function
+        print_simulation && println("counting the objective function")
+        
+        total_cars_cost = sum(Array{Float64}([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)]))
+
+        #= total_station_cost = sum([station.charging_station_base_cost + 
+                                    station.max_number_of_charging_points * station.charging_point_cost_fast
+                                    for station in stations]) =#
+        
+        total_station_cost = sum(Array{Float64}([station.charging_station_base_cost for station in stations[sol.open_stations_state]]))
+
+        return revenues - (total_cars_cost + total_station_cost) / cost_factor
     end
 end
 
 function E_carsharing_sim(sol::Solution)
-    if online_request_serving
-        # we have to reset the selected paths inside the solution only for the selected paths
-        global online_selected_paths = [Array{Bool, 1}(falses(nrow(scenario_list[sc].feasible_paths))) for sc in eachindex(scenario_list)]
+    # set the counter to keep post on the number of requets that we served
+    global number_of_served_requests = 0;
+
+    #check the feasibilty of the solution
+    if is_feasible_solution(sol)
+        if online_request_serving
+            # we have to reset the selected paths inside the solution only for the selected paths
+            global online_selected_paths = [Array{Bool, 1}(falses(nrow(scenario_list[sc].feasible_paths))) for sc in eachindex(scenario_list)]
+        end
+        
+        f_x  = 0
+        for i in eachindex(scenario_list)
+            f_x_sc = E_carsharing_sim(sol, i)
+            if f_x_sc == Inf
+                # penality expersion is as follow: 10^(16 - % of served request/10) so if 
+                return 10 ^16 * 10 ^ (-1 *  (number_of_served_requests /sum(nrow(sc.request_list) for sc in scenario_list) * 100 / 10))
+            end
+            f_x += f_x_sc
+        end
+        return -1 * f_x/length(scenario_list)
+    else
+        print_simulation && println("The solution is not feasible")
+        return (10 ^(16 - (number_of_served_requests /sum(nrow(sc.request_list) for sc in scenario_list) * 100 / 10)))
     end
-    f_x  = 0
-    for i in eachindex(scenario_list)
-        f_x = E_carsharing_sim(sol, i)
-    end
-    return -1 * f_x/length(scenario_list)
 end
 
 function save_sol(sol::Solution)
