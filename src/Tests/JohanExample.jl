@@ -31,3 +31,18 @@ optimize!(m)
 
 best_x1 , best_x2 = value(x1) , value(x2)
 objValue = objective_value(m)
+
+@variable(m, x, Int)
+@constraint(m, con1, x <= 85)
+@objective(m, Max, -x^2 + 85*x)
+
+value(x)
+
+
+x = collect(0:85)
+f(x) = 85*x -x^2 
+
+using Plots
+
+plot(x, f)
+42*43

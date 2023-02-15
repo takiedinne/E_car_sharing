@@ -37,7 +37,7 @@ Station(station_node_id::Int64, initial_cars_number::Int64, initial_id::Int64) =
     
     cars = DataFrame(car_id = collect(id:id+initial_cars_number-1), car_type = [Smart_ED for i in 1:initial_cars_number],
                     status = CAR_PARKED .* ones(Int64, initial_cars_number),
-                    last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = NaN * ones(initial_cars_number),
+                    last_battery_level = 100.0 .* ones(Float64, initial_cars_number), start_charging_time = zeros(initial_cars_number),
                     start_reservation_time = NaN * ones(initial_cars_number), pending_reservation = zeros(initial_cars_number), expected_arrival_time = NaN * ones(initial_cars_number))
     
     #create the parking places
@@ -62,6 +62,7 @@ Solution() = Solution(falses(length(get_potential_locations())), zeros(length(ge
 
 
 mutable struct Scenario
+    scenario_id::Int64
     request_list::DataFrame 
     feasible_paths::DataFrame
 end

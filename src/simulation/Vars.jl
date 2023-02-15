@@ -25,14 +25,14 @@ project_path(parts...) = normpath(joinpath(@__DIR__, "../..", parts...))
 if test_vars
     # Different File paths
     global all_request_details_path = project_path("Data/test_trips.txt")
-    global Manhatten_network_details_file = project_path("Tests/test_graph.xml") #the path of the file which contains the manhatten data
+    global Manhatten_network_details_file = project_path("Data/Instances/test_graph.xml") #the path of the file which contains the manhatten data
     global Manhatten_network_Metagraph_file = project_path("Data/test_graph.mg")
-    global scenarios_paths = project_path.("Data/Scenarios_test/" .* filter!(x -> startswith(x, "1test"), readdir(project_path("Data/Scenarios_test"))))
-    
+    global scenarios_paths = project_path.("Data/Scenarios_test/" .* filter!(x -> startswith(x, "test"), readdir(project_path("Data/Scenarios_test"))))
+    global serialized_scenarios_folder = project_path("Data/scenarios_objects_test")
     #general parameters for the simulation:
-    global maximum_walking_time = 1 # in min
+    global maximum_walking_time = 60 # in min
     global walking_speed = 1/60 # m/s
-    global driving_speed =  1/60 #Km/h
+    global driving_speed =  50.4/60 #Km/h
     global time_slot_length = 1 # min
 
 else
@@ -41,7 +41,7 @@ else
     global Manhatten_network_details_file = project_path("Data/Instances/manhattan-long-trips.xml") #the path of the file which contains the manhatten data
     global Manhatten_network_Metagraph_file = project_path("Data/manhatten_graph.mg")
     global scenarios_paths = project_path.("Data/Scenarios_1000_greaterthan2/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Scenarios_1000_greaterthan2"))))
-    
+    global serialized_scenarios_folder = project_path("Data/scenarios_objects")
     #general parameters for the simulation:
     global maximum_walking_time = 5 # in min
     global walking_speed = 1.34 # m/s

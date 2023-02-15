@@ -18,6 +18,8 @@ using Tables
 
 using DelimitedFiles
 using Serialization
+using BenchmarkTools
+
 
 include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
@@ -27,6 +29,7 @@ include("simulation/E_carsharing_sim.jl")
 
 include("Mixed_integer_program/Mixed_integer_programme.jl")
 
+
 export E_carsharing_sim,
        Solution,
        generate_random_solution,
@@ -35,5 +38,5 @@ export E_carsharing_sim,
        set_online_mode, 
        initialize_scenario,
        initialize_scenarios,
-       get_stored_solution,
+       get_stored_solution
 end

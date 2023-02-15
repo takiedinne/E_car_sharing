@@ -1,4 +1,4 @@
-time_slot_length = 5 # min 
+time_slot = 5 # min 
 scenario_path_list = ["Data/Scenarios_1000_greaterthan2/Output1000_1.txt"#= ,
     "Data/Scenarios_1000_greaterthan2/Output1000_2.txt",
     "Data/Scenarios_1000_greaterthan2/Output1000_3.txt",
@@ -77,7 +77,7 @@ function get_solutions()
 
             # set μ
             start_charging_time_slot = H.arriving_time[h]
-            end_charging_time_slot = H.arriving_time[h] + ceil(Int, (δ_ij[start_station_id, destination_station_id] / charging_rate) / 60 / time_slot_length)
+            end_charging_time_slot = H.arriving_time[h] + ceil(Int, (δ_ij[start_station_id, destination_station_id] / charging_rate) / 60 / time_slot)
             μ[h, destination_station_id, start_charging_time_slot:end_charging_time_slot] .= 1
 
             # set λ

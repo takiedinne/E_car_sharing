@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<instance>
+    <info>
+        <dataset>e4share</dataset>
+        <name>manhattan-long-trips</name>
+    </info>
+    <network>
+       <nodes>
+            <node id="0" type="2">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="1" type="2">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="2" type="1">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>6</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="3" type="1">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>6</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="4" type="2">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+                <custom>
+                    <max_number_of_charging_points>10</max_number_of_charging_points>
+                    <max_power>200000</max_power>
+                    <charging_station_base_cost>5900000</charging_station_base_cost>
+                    <charging_point_cost_slow>2200000</charging_point_cost_slow>
+                    <max_charging_rate_per_charging_point_slow>22000</max_charging_rate_per_charging_point_slow>
+                    <charging_point_cost_fast>3200000</charging_point_cost_fast>
+                    <max_charging_rate_per_charging_point_fast>50000</max_charging_rate_per_charging_point_fast>
+                </custom>
+            </node>
+            <node id="5" type="1">
+                <latitude>40.791992</latitude>
+                <longitude>-73.962189</longitude>
+            </node>
+       </nodes>
+       
+       <links symetrics ="false">
+            <link tail="0" head="1" id="0">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="1" head="2" id="1">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="3" head="4" id="3">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="4" head="5" id="2">
+                <length>1</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+
+            <link tail="0" head="3" id="4">
+                <length>1700</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="1" head="4" id="5">
+                <length>1700</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            <link tail="2" head="5" id="5">
+                <length>1700</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            
+            <link tail="4" head="1" id="5">
+                <length>1700</length>
+                <custom>
+                    <frc>3</frc>
+                    <maxSpeed>50</maxSpeed>
+                </custom>
+            </link>
+            
+       </links>
+       
+    </network>
+</instance>
