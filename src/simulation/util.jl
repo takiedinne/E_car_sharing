@@ -662,6 +662,85 @@ function get_stored_solution(sol_id=1)
     deserialize(project_path("Data/MIP/solutions/solution_$sol_id.jls"))
 end
 
+################################## heuristics ########################################
+#=
+    this function tries to serve new requests after opening new station for each scenario
+    inputs:
+        @sol: the solution
+        @station_id: the id of the station that we recently oponed
+    outputs:
+        basicaly it return the new seletced paths ad assigne it as well to the onling_selected_paths so we 
+        could get it from there as well
+=#
+function serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64, 1})
+    @assert !online_request_serving && all(x->x, sol.open_stations_state[stations_idx])  "we are in wrong mode or the station is closed"
+    for sc_id in eachindex(scenario_list)
+        sc = scenario_list[sc_id] # handle one scenario a time
+        
+        #get the ids of feasible paths that starts (or ends) from (or to) station_id
+        potential_feasible_path = get_request_feasible_path(stations_idx, sc)
+        #println("list of paths to be examined : $potential_feasible_path")
+        if length(potential_feasible_path) > 0
+            #index over the paths
+            cur_fp_id = 1
+            #the current request id allow as to skip paths if we succefly handle it with a previous path 
+            cur_req_id::Int64 = sc.feasible_paths.req[potential_feasible_path[cur_fp_id]]
+            #println("we are trying to handle request N° $cur_req_id")
+            #iterate over the potential paths
+            while cur_fp_id <= length(potential_feasible_path)
+                
+                #check if we are handling a new request
+                if sc.feasible_paths.req[potential_feasible_path[cur_fp_id]] != cur_req_id
+                    cur_req_id = sc.feasible_paths.req[potential_feasible_path[cur_fp_id]]
+                    #println("**************************************************")
+                    #println("we are trying to handle request N° $cur_req_id")
+                end
 
+                sol.selected_paths[sc_id][potential_feasible_path[cur_fp_id]] = true 
+                #println("we are trying serve request N° $cur_req_id with path N° $(potential_feasible_path[cur_fp_id])")
+                
+                global failed = false
+                E_carsharing_sim(sol, sc_id)
 
+                if !failed
+                    #println("Success!! We could serve request N° $cur_req_id with the path N° $(potential_feasible_path[cur_fp_id])")
+                    #here  the added path is succefuly excuted without any problem 
+                    #se we need to skip all the paths corresponding to the current request
+                    while cur_fp_id <= length(potential_feasible_path) && sc.feasible_paths.req[potential_feasible_path[cur_fp_id]] == cur_req_id
+                        #println("we are skiping the paths for request $cur_req_id")
+                        cur_fp_id +=1
+                    end
+                else
+                    #println("failed!! We could not  serve request N° $cur_req_id with the path N° $(potential_feasible_path[cur_fp_id])")
+                    #here the selected path result a non feasable solution
+                    #se we need to reset the solution
+                    sol.selected_paths[sc_id][potential_feasible_path[cur_fp_id]] = false
+                    cur_fp_id +=1
+                end
+            end
+        end
+    end
+    
+    #save the solution 
+    global online_selected_paths = sol.selected_paths
+    E_carsharing_sim(sol)
+end
+
+#=
+    This function retrun the paths where the station, defined by station_id, is origin or destination.
+    in addition this function must ensure that the paths are for only requests that not served by another path
+    inputs:
+        @sol: the solution
+        @scenario: the scenario that we want to have feasible paths for it
+    outputs:
+        Feasible_paths => list of feasible paths 
+=#
+function get_request_feasible_path(stations_idx::Array{Int64, 1}, scenario::Scenario)
+    station_nodes_idx = get_potential_locations()[stations_idx]
+    
+    fp_starting_from_req = findall(x->x in station_nodes_idx, scenario.feasible_paths.origin_station)    
+    fp_ending_from_req = findall(x->x in station_nodes_idx, scenario.feasible_paths.destination_station)
+
+    union(fp_starting_from_req, fp_ending_from_req)
+end
 

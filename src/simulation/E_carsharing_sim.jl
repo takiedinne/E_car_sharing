@@ -17,6 +17,8 @@ global scenario_list  # contain all scenario instances as dataframe
 global shortest_car_paths = Dict{Int64,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time
 global shortest_walking_paths = Dict{Int64,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time based on non directed graph
 
+global online_selected_paths = Array{Array{Bool,1}, 1}() #useful for the online mode to see which paths is chosen
+global number_of_served_requests = 0 # a couter for the numlber of requests that the simulation served
 
 #= #################################################################### =#
 #= ############# Global variables for each scenario #################### =#
@@ -26,8 +28,8 @@ global revenues = 0 #the revenue of serving customers
 
 global stations = Array{Station,1}() # list of open_stations_state
 
-global online_selected_paths = Array{Array{Bool,1}, 1}() #useful for the online mode to see which paths is chosen
-global number_of_served_requests = 0 # a couter for the numlber of requests that the simulation served
+
+
 ################################ Online mode ####################################
 @resumable function request_arrival_process_online_mode(env::Environment, scenario::Scenario, sol::Solution)
     #browse all the requests (the requests are sorted according to their arrival time)
@@ -295,11 +297,17 @@ function initialize_sim(sol::Solution, scenario_id::Int64)
 
     if !online_request_serving
         #create a new column in the scenario.requets_list to get the selected path
+        #here we can recheck if the slected paths respecte the constarints (each request is served by only one path)
         fp = [Int[] for i in eachindex(scenario.request_list.reqId)]
         for i in eachindex(sol.selected_paths[scenario_id])
             if sol.selected_paths[scenario_id][i]
                 req = scenario.feasible_paths.req[i]
-                fp[findfirst(==(req), scenario.request_list.reqId)] = [i]
+                reqId = findfirst(==(req), scenario.request_list.reqId)
+                if length(fp[reqId]) > 0 # so we already put the selected_paths for this request, so we have in feasible sol
+                    failed = false
+                    return #to go out from this current function
+                end
+                fp[reqId] = [i]
             end
         end
         scenario.request_list.fp = fp
@@ -307,10 +315,14 @@ function initialize_sim(sol::Solution, scenario_id::Int64)
 end
 
 function E_carsharing_sim(sol::Solution, scenario_id::Int64)
+    #println("we are evaluating $sol")
     scenario = scenario_list[scenario_id]
     
     initialize_sim(sol, scenario_id)
-
+    if failed
+        print_simulation && printstyled(stdout, "Fatal Error: the solution is not feasible\n", color=:light_red)
+        return Inf
+    end
     sim = Simulation()
     if online_request_serving
         @process request_arrival_process_online_mode(sim, scenario, sol)
@@ -364,9 +376,3 @@ function E_carsharing_sim(sol::Solution)
         return (10 ^(16 - (number_of_served_requests /sum(nrow(sc.request_list) for sc in scenario_list) * 100 / 10)))
     end
 end
-
-function save_sol(sol::Solution)
-    println("save solution")
-    serialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/GIHH_V2.0/sol.jls", sol)
-end
-

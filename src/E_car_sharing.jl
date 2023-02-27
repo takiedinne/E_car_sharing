@@ -38,5 +38,6 @@ export E_carsharing_sim,
        set_online_mode, 
        initialize_scenario,
        initialize_scenarios,
-       get_stored_solution
+       get_stored_solution,
+       serve_requests_after_opening_station
 end

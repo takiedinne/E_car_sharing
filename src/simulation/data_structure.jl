@@ -67,4 +67,3 @@ mutable struct Scenario
     feasible_paths::DataFrame
 end
 
-
