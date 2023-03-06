@@ -6,8 +6,9 @@
 # manhaten_city_graph = create_graph_from_XML(Manhatten_network_details_file, save_file = "Data/test_graph.mg")
 
 #to load the graph use the following instruction ===> it is better to load the graph in terme of computational performance
-global manhaten_city_graph = loadgraph(Manhatten_network_Metagraph_file, MGFormat())
-global non_directed_manhaten_city_graph = MetaGraph(manhaten_city_graph) # for walking purposes we don't take into account the directed edges 
+global manhaten_city_graph = loadgraph(Manhatten_network_MetaDigraph_file, MGFormat())
+#global non_directed_manhaten_city_graph = loadgraph(Manhatten_network_Metagraph_file, MGFormat()) # for walking purposes we don't take into account the directed edges 
+global non_directed_manhaten_city_graph = MetaGraph(manhaten_city_graph) 
 global potential_locations = [] # the index of all potential stations 
 #read all requests details
 global all_request_df = CSV.read(all_request_details_path, DataFrame)
@@ -216,6 +217,7 @@ end
         # reserve the place 
         stations[drop_off_station_id].parking_places.status[parking_place_id] = P_RESERVED
     else
+        #show the stations vars
         print_simulation && printstyled(stdout, "Customer [$(req.reqId)]: (offline mode) there is no free parking place at station that has id  $drop_off_station_id \n"; color=:light_red)
         global failed = true
         return

@@ -1,46 +1,30 @@
 include("../E_car_sharing.jl")
 using Main.E_car_sharing
-using BenchmarkTools
-using DataFrames
-using Profile
+using Serialization
+using DataFrames, Graphs, MetaGraphs
 
 const e = E_car_sharing
 
-initialize_scenarios(collect(1:1))
-n = length(e.get_potential_locations())
-open_stations_state = falses(n)
-initial_cars_number = zeros(n)
-selected_paths = [falses(i) for i in [nrow(e.scenario_list[j].feasible_paths) for j in eachindex(e.scenario_list)]]
+e.validate_simulation_model()
 
-# treatement for the solution
-open_stations_state[60] =  true
-initial_cars_number[60] = 1
 
-sol = Solution(open_stations_state, initial_cars_number, selected_paths)
+#scenario scenarios_objects
+sc = e.scenario_list[1]
+#station id
+station_id = 60
+station_node_id = e.potential_locations[station_id]
 
-sol.open_stations_state[9] = true
-e.serve_requests_after_opening_station(sol, [9])
+#get all the selected_requests and teir feasible paths
+selected_paths = sc.feasible_paths[sol.selected_paths[1], :]
+served_requests = sc.request_list[selected_paths.req, :]
 
-a = trues(10)
-stations_idx = [1, 2]
+# get the feasible paths for the station
+selected_paths_starting_from_station = filter(x -> x.origin_station == station_node_id, selected_paths)
+selected_paths_ending_from_station = filter(x -> x.destination_station == station_node_id, selected_paths)
+interesting_selected_paths = sort(vcat(selected_paths_starting_from_station, selected_paths_ending_from_station), [:start_driving_time])
+interesting_selected_requests = filter(x-> x.reqId in interesting_selected_paths.req, served_requests)
+# initial cars number and capacity
+initial_cars_number = sol.initial_cars_number[station_id]
+capacity = get_prop(e.manhaten_city_graph, e.potential_locations[station_id], :max_number_of_charging_points)
 
-all(x->x, [true, false])
-
-scenario = e.scenario_list[1]
-
-station_nodes_idx = e.get_potential_locations()[stations_idx]
-
-fp_starting_from_req = findall(x->x in station_nodes_idx, scenario.feasible_paths.origin_station)
-
-nbr = 0
-for i in eachindex(fp_starting_from_req)
-    path_id = fp_starting_from_req[i]
-    if (scenario.feasible_paths.origin_station[path_id] in  station_nodes_idx)
-        println("error with path number $path_id")
-        nbr += 1
-    end
-end
-nbr == length(fp_starting_from_req)
-
-e.manhaten_city_graph
-
+# test the mixed integer programming

@@ -19,6 +19,7 @@ using Tables
 using DelimitedFiles
 using Serialization
 using BenchmarkTools
+using Dates
 
 
 include("simulation/data_structure.jl")
@@ -29,15 +30,18 @@ include("simulation/E_carsharing_sim.jl")
 
 include("Mixed_integer_program/Mixed_integer_programme.jl")
 
+include("expriments.jl")
+
 
 export E_carsharing_sim,
-       Solution,
-       generate_random_solution,
-       is_feasible_solution,
-       car_type,
-       set_online_mode, 
-       initialize_scenario,
-       initialize_scenarios,
-       get_stored_solution,
-       serve_requests_after_opening_station
+    Solution,
+    generate_random_solution,
+    is_feasible_solution,
+    car_type,
+    set_online_mode,
+    initialize_scenario,
+    initialize_scenarios,
+    get_stored_solution,
+    get_solutions,
+    serve_requests_after_opening_station
 end

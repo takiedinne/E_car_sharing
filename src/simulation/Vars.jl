@@ -34,12 +34,12 @@ if test_vars
     global walking_speed = 1/60 # m/s
     global driving_speed =  50.4/60 #Km/h
     global time_slot_length = 1 # min
-
 else
     # Different File paths
     global all_request_details_path = project_path("Data/trips_ML_daily_greaterthan2_with_revenue&minutes.txt")
     global Manhatten_network_details_file = project_path("Data/Instances/manhattan-long-trips.xml") #the path of the file which contains the manhatten data
-    global Manhatten_network_Metagraph_file = project_path("Data/manhatten_graph.mg")
+    global Manhatten_network_MetaDigraph_file = project_path("Data/manhatten_MetaDiGraph.mg")
+    global Manhatten_network_Metagraph_file = project_path("Data/manhatten_MetaGraph.mg")
     global scenarios_paths = project_path.("Data/Scenarios_1000_greaterthan2/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Scenarios_1000_greaterthan2"))))
     global serialized_scenarios_folder = project_path("Data/scenarios_objects")
     #general parameters for the simulation:
@@ -47,7 +47,6 @@ else
     global walking_speed = 1.34 # m/s
     global driving_speed =  50 #Km/h
     global time_slot_length = 5 # min
-
 end
 
 
