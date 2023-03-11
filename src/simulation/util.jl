@@ -270,13 +270,16 @@ end
     description: create the scenario object which gather the requests list and their feasible paths
     inputs:
         @scenario_path: the path to the file where the request od the scenario are stored
+        @id: the id of the scenario
+        @check_file: if true the function will check if the scenario is already serialized 
+                      and if so it will return the serialized object
     outputs:
         scenario: the object of type scenario
  =#
-function initialize_scenario(scenario_path::String, id::Int64=-1)
+function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
     #println("we are initializing scenarion number $id")
     file_path = serialized_scenarios_folder * "/scenario$id.sc"
-    if isfile(file_path)
+    if check_file && isfile(file_path)
         deserialize(file_path)
     else
        
@@ -584,6 +587,16 @@ function free_parking_place(parking_place)
         status, pending_reservation = P_FREE, 0
     end
     status, pending_reservation, -1# always there is no car
+end
+
+#= a function to set the walking time =#
+function set_walking_time(new_walking_time::Int64)
+    global maximum_walking_time = new_walking_time
+end
+
+#= function to set the cost factor =#
+function set_cost_factor(new_cost_factor::Int64)
+    global cost_factor = new_cost_factor
 end
 
 ############################ solution functions ###################################

@@ -19,7 +19,7 @@ using Tables
 using DelimitedFiles
 using Serialization
 using BenchmarkTools
-using Dates
+
 
 
 include("simulation/data_structure.jl")
@@ -43,5 +43,8 @@ export E_carsharing_sim,
     initialize_scenarios,
     get_stored_solution,
     get_solutions,
-    serve_requests_after_opening_station
+    serve_requests_after_opening_station,
+    set_walking_time,
+    set_cost_factor,
+    project_path
 end

@@ -12,7 +12,7 @@ global non_directed_manhaten_city_graph = MetaGraph(manhaten_city_graph)
 global potential_locations = [] # the index of all potential stations 
 #read all requests details
 global all_request_df = CSV.read(all_request_details_path, DataFrame)
-global scenario_list  # contain all scenario instances as dataframe
+global scenario_list = Array{Scenario, 1}() # contain all scenario instances as dataframe
 
 #initialization
 global shortest_car_paths = Dict{Int64,Any}() #the results of djisktra algorithms to avoid calling the algorithm each time

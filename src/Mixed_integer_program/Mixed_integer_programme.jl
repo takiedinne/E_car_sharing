@@ -140,7 +140,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         write_to_file(mip, mip_file_path)
     end
     set_optimizer(mip, Gurobi.Optimizer)
-    set_time_limit_sec(mip, 1200.0)
+    #set_time_limit_sec(mip, 1200.0)
     set_silent(mip)
 
     @info "solving the mip ..."

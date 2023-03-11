@@ -1,3 +1,4 @@
+
 global results_folder = project_path("results")
 #= 
     this function has the role of validating the simulation model by comparing the results of the simulation
@@ -73,6 +74,11 @@ function preprocessing_experiment()
     global maximum_walking_time
     global all_requests_list
 
+    if work_with_time_slot
+        work_with_time_slot = false
+        @warn "The working with time slot is set to false"
+    end
+
     # the path for the results folder for this experiment (created if doesn't exist)
     # the name preprocessing_2017 is because this experiment is the reproduction of the experiment on the article of 2017
     result_folder_for_this_experiment = string(results_folder, "/preprocessing_2017")
@@ -85,12 +91,17 @@ function preprocessing_experiment()
 
     nbr_requests_list = [1000 , 2000, 3000, 5000, 10000]
     walking_time_list = [5, 6, 7, 8, 10, 15]
-    all_requests_list = all_request_df
     
+    #the results will be saved in a dataframe
     results_as_df = DataFrame(K = Int64[], β_w = Int64[], K_a = Int64[], H = Int64[], PP_time =[])
+    
     for (nbr_requests, wt) in Iterators.product(nbr_requests_list, walking_time_list)
+        # we are going to use the generated scenarios
+        # set the file path
+        curr_sc_path = "Data/generated_scenario/scenario_$(nbr_requests)_requests.txt"
+        
         @info "($nbr_requests,$wt)  is being tested ..."
-        curr_requests_list = all_requests_list[1:nbr_requests, :]
+        curr_requests_list = requests_as_dataframe(curr_sc_path)
         
         #run the preprocessing_function
         curr_pp_time = @elapsed afp = get_feasible_paths(curr_requests_list, all_station, wt)
@@ -116,7 +127,12 @@ end
 function preprocessing_experiment2019()
     # global variables
     global all_requests_list
-
+    
+    # as we are interested by only the feasibles paths, we don't need to work with time slot
+    if work_with_time_slot
+        work_with_time_slot = false
+        @warn "The working with time slot is set to true!"
+    end
     # the path for the results folder for this experiment (created if doesn't exist)
     # the name preprocessing_2019 is because this experiment is the reproduction of the experiment on the article of 2019
     result_folder_for_this_experiment = string(results_folder, "/preprocessing_2019")
@@ -173,7 +189,7 @@ end
     this function solve the Mixed Integer programms and return the best value found
     the aim is to compare afterwords the result with the Hyper heuristic frame work 
     N.P: another same experiment will be done in Java counterpart to compare the results
-    The results can not be compared to TABLE II in article [1] as we don't know what are the requests used. Nevertheless 
+    The results can not be compared to TABLE II - IV in article [1] as we don't know what are the requests used. Nevertheless 
     we can have an idea about the values ( it is always benificial to see if we are in the same range of values)
  =#
  
@@ -193,23 +209,31 @@ function mixed_integer_programming_experiment()
     results_save_path = string(result_folder_for_this_experiment,"/MIP_", now(), ".csv")
     
     #list of parameters
-    nbr_requests_list = [#= 1000, 2000, =# 3000#= , 5000, 10000 =#]
-    walking_time_list = [5#= , 6, 7, 8, 10, 15 =#]
+    nbr_requests_list = [1000, 2000, 3000, 5000, 10000]
+    walking_time_list = [5, 6, 7, 8, 10, 15]
+    costs_factors_list = [10^4, 10^5, 10^6]
 
-    results_as_df = DataFrame(K=[], β_w=[], PF_Opt=[], J_bar=[], K_bar=[], solver_time=[], total_time =[])
-    for (nr, wt) in Iterators.product(nbr_requests_list, walking_time_list)
-        @info "[MIP experiment]: solving a MIP with $nr requests and walking time equal to $wt..."
+    results_as_df = DataFrame(CF=[], K=[], β_w=[], PF_Opt=[], J_bar=[], K_bar=[], solver_time=[], total_time =[])
+    for (cf, nr, wt) in Iterators.product(costs_factors_list, nbr_requests_list, walking_time_list)
+        @info "[MIP experiment Cost factor = $cf]: solving a MIP with $nr requests and walking time equal to $wt..."
         
         file_path = string(generated_scs_folder_path, "/scenario_", nr,"_requests.txt")
        
         global maximum_walking_time = wt
-        scenario = initialize_scenario(file_path)
+        global cost_factor = cf
 
-        TT = @elapsed obj, sol, solve_time = solve_with_mixed_integer_program([scenario])
+        #initialize the scenario
+        scenario = initialize_scenario(file_path, check_file=false)
+
+        # the mip file path where the MIP model will be saved
+        mip_file_path = "Data/MIP/programs_file/E_carsharing_mip_generated_$(nr)_requests_$(wt)_walking_time_$(cf)_CF_.mof.json"
+        
+        #solve the MIP
+        TT = @elapsed obj, sol, solve_time = solve_with_mixed_integer_program([scenario], mip_file_path)
         if obj == -Inf
-            push!(results_as_df, [nr, wt, obj, missing, missing, solve_time, TT])
+            push!(results_as_df, [cf, nr, wt, obj, missing, missing, solve_time, TT])
         else
-            push!(results_as_df, [nr, wt, obj, sum(sol.open_stations_state), sum(sol.selected_paths[1]), solve_time, TT])
+            push!(results_as_df, [cf, nr, wt, obj, sum(sol.open_stations_state), sum(sol.selected_paths[1]), solve_time, TT])
 
             #save the sol file
             save_sol_path = string(generated_scs_folder_path, "/serialized_solutions/sol_", nr,"_requests.jls")
@@ -218,3 +242,29 @@ function mixed_integer_programming_experiment()
     end
     CSV.write(results_save_path, results_as_df)
 end
+
+#create a function to generate feasible paths for the generated scenarios
+function generate_feasible_paths_for_generated_scenarios()
+    #list of walking times
+    walking_time_list = [5, 6, 7, 8, 10, 15]
+    all_station = potential_locations
+    gen_sce_paths = filter!(x -> startswith(x, "scen"), readdir("Data/generated_scenario"))
+    #loop over scenarios_paths
+    for path in gen_sce_paths 
+        requests = requests_as_dataframe("Data/generated_scenario/$(path)")
+        
+        for wt in  walking_time_list
+            @info "generating feasible paths for $(path) with walking time equal to $wt"
+            #get the feasible paths
+            fps = get_feasible_paths(requests, all_station, wt)
+            
+            #save the feasible paths as CSV file
+            save_path = string("Data/feasible_paths/paths_generated_", path,"_", wt, "min_walking_time.csv")
+
+            #save the file
+            CSV.write(save_path, fps)
+
+        end
+    end
+end
+

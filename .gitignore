@@ -9,4 +9,5 @@ Data/manhatten_MetaDiGraph.mg
 Data/manhatten_MetaGraph.mg
 Data/trips_ML_daily_greaterthan2_with_revenue&minutes.txt
 results/*
+Data/feasible_paths/*
 
