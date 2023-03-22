@@ -9,7 +9,7 @@
 global manhaten_city_graph = loadgraph(Manhatten_network_MetaDigraph_file, MGFormat())
 #global non_directed_manhaten_city_graph = loadgraph(Manhatten_network_Metagraph_file, MGFormat()) # for walking purposes we don't take into account the directed edges 
 global non_directed_manhaten_city_graph = MetaGraph(manhaten_city_graph) 
-global potential_locations = [] # the index of all potential stations 
+global potential_locations = Int64[] # the index of all potential stations 
 #read all requests details
 global all_request_df = CSV.read(all_request_details_path, DataFrame)
 global scenario_list = Array{Scenario, 1}() # contain all scenario instances as dataframe
@@ -52,9 +52,12 @@ global stations = Array{Station,1}() # list of open_stations_state
         if pickup_station_id != -1 && drop_off_station_id != -1 && selected_car_id != -1 && parking_place_id != -1 
             #book the trip (the car + parking palce ,etc) only for the 
             walking_duration = get_walking_time(req.ON, potential_locations[pickup_station_id])
+            work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
+            
             start_walking_time = now(env)
             driving_duration = get_trip_duration(potential_locations[pickup_station_id], potential_locations[drop_off_station_id])
-
+            work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
+            
             book_trip(pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, start_walking_time + walking_duration, start_walking_time + walking_duration + driving_duration)
 
             # for the online serving we check all the variables otherwise we have only to check the stations
@@ -82,9 +85,12 @@ end
 @resumable function perform_the_trip_process_online_mode(env::Environment, req::DataFrameRow, sol::Solution, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
     #get the different duration for the trip.
     walking_duration = get_walking_time(req.ON, potential_locations[pickup_station_id])
+    work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
+
     start_walking_time = now(env)
     driving_duration = get_trip_duration(potential_locations[pickup_station_id], potential_locations[drop_off_station_id])
-
+    work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
+    
     print_simulation && println("Customer [", req.reqId, "]: the request is accepted") #
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
 
@@ -153,8 +159,11 @@ end
     global potential_locations #tp get the node id of station
     
     walking_duration = get_walking_time(req.ON, potential_locations[pickup_station_id])
-    driving_duration = get_trip_duration(potential_locations[pickup_station_id], potential_locations[drop_off_station_id])
+    work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
 
+    driving_duration = get_trip_duration(potential_locations[pickup_station_id], potential_locations[drop_off_station_id])
+    work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
+    
     print_simulation && println("Customer [", req.reqId, "]: the request is accepted")
     print_simulation && println("Customer [", req.reqId, "]: start walking from ", req.ON, " at ", now(env))
 

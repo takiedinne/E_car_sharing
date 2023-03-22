@@ -201,15 +201,16 @@ end
 #=
     the preprocessing procedure
 =#
-function get_feasible_paths(requests_list::DataFrame, stations::Vector{T}, maximum_walking_time) where {T<:Int64}
-    paths = DataFrame(req=Int64[], origin_station=Int64[], destination_station=Int64[], start_driving_time=[], arriving_time=[], Rev=[])
-    β_w = (work_with_time_slot) ? maximum_walking_time / time_slot_length : maximum_walking_time
-    for req in eachrow(requests_list)
 
+function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, maximum_walking_time)
+    paths = DataFrame(req=Int64[], origin_station=Int64[], destination_station=Int64[], start_driving_time=[], arriving_time=[], Rev=[])
+    β_w = maximum_walking_time
+    for req in eachrow(requests_list)
+        
         print_preprocessing && println("we are with req ", req.reqId)
         #check all possible starting station
         for origin_station_id in stations
-
+            
             walking_time_to_origin_station = get_walking_time(req.ON, origin_station_id)
             print_preprocessing && println("--> walking duration from ", req.ON, " to the station $origin_station_id is $walking_time_to_origin_station")
             #check accessibilty to the origin station (walking time)
@@ -247,13 +248,10 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{T}, maxim
                                 to do some special treatement 
                             =#
 
-                            start_time = walking_time_to_origin_station + req.ST * (work_with_time_slot ? 1 : time_slot_length)
-                            arriving_time = start_time + trip_duration
-
-                            #= if work_with_time_slot
-                                start_time = ceil(Int, start_time / time_slot_length)
-                                arriving_time = start_time + ceil(Int, trip_duration / time_slot_length)
-                            end =#
+                            start_time = req.ST * time_slot_length + walking_time_to_origin_station
+                            work_with_time_slot == true && (start_time = ceil(Int, start_time / time_slot_length))
+                            
+                            arriving_time = start_time + (work_with_time_slot == true ? ceil(Int, trip_duration/time_slot_length) : trip_duration)
 
                             push!(paths, (req.reqId, origin_station_id, destination_station_id, start_time, arriving_time, req.Rev))
                         end
@@ -428,7 +426,7 @@ function get_walking_time(id_node1, id_node2)
     end
 
     walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60
-    work_with_time_slot && walking_time != Inf && (walking_time = ceil(Int64, walking_time / time_slot_length))
+    #work_with_time_slot && walking_time != Inf && (walking_time = ceil(Int64, walking_time / time_slot_length))
 
     walking_time
 end
@@ -442,7 +440,7 @@ function get_trip_duration(id_node1, id_node2)
     end
 
     driving_duration = shortest_car_paths[id_node1].dists[id_node2] / driving_speed / 1000 * 60 # convert it to minutes 
-    work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
+    #work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
     driving_duration
 end
 

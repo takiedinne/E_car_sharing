@@ -2,6 +2,10 @@ Data/Charts
 Data/generated_scenario
 Data/Scenarios_1000_greaterthan2
 Data/Instances/manhattan-long-trips.xml
+Data/Instances/C1
+Data/Instances/C2
+Data/Instances/C3
+Data/Instances/C4
 Data/MIP/*
 Data/scenarios_objects/*
 Data/scenarios_objects_test/*
@@ -10,4 +14,5 @@ Data/manhatten_MetaGraph.mg
 Data/trips_ML_daily_greaterthan2_with_revenue&minutes.txt
 results/*
 Data/feasible_paths/*
-
+.DS_Store
+DockerFile

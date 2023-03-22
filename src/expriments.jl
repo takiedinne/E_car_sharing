@@ -70,9 +70,11 @@ end
          2019, Pages 121-150, ISSN 0191-2615
 =#
 function preprocessing_experiment()
+    println("[preprocessing_experiment 2017]: start ...")
     # global variables
     global maximum_walking_time
     global all_requests_list
+    global work_with_time_slot
 
     if work_with_time_slot
         work_with_time_slot = false
@@ -98,7 +100,7 @@ function preprocessing_experiment()
     for (nbr_requests, wt) in Iterators.product(nbr_requests_list, walking_time_list)
         # we are going to use the generated scenarios
         # set the file path
-        curr_sc_path = "Data/generated_scenario/scenario_$(nbr_requests)_requests.txt"
+        curr_sc_path = project_path("Data/generated_scenario/scenario_$(nbr_requests)_requests.txt")
         
         @info "($nbr_requests,$wt)  is being tested ..."
         curr_requests_list = requests_as_dataframe(curr_sc_path)
@@ -125,9 +127,10 @@ end
          IEEE Symposium on Cpmputer and Communications, 2017 Heraklion, Greec. hal-01665609
  =#
 function preprocessing_experiment2019()
+    @info "[preprocessing Exp 2019]: start ..."
     # global variables
     global all_requests_list
-    
+    global work_with_time_slot
     # as we are interested by only the feasibles paths, we don't need to work with time slot
     if work_with_time_slot
         work_with_time_slot = false
@@ -150,7 +153,7 @@ function preprocessing_experiment2019()
     #initialize scenarios to get the requests list
     initialize_scenarios(collect(1:maximum(nbr_scenarions_list)))
     for (scenario_number, wt) in Iterators.product(nbr_scenarions_list, walking_time_list)
-        @info "($scenario_number,$wt)  is being tested ..."
+        @info "[preperocessing Exp 2019]: ($scenario_number,$wt)  is being tested ..."
         curr_requests_list = vcat([sc.request_list for sc in scenario_list[1:scenario_number]]...)
         
         #run the preprocessing_function
@@ -164,6 +167,7 @@ function preprocessing_experiment2019()
         push!(results_as_df, [scenario_number, wt, curr_k_a, curr_H, curr_pp_time])        
     end
     CSV.write(results_save_path, results_as_df)
+    @info "[preprocessing Exp 2019]: The experiment is finished !"
 end
 
 
@@ -247,7 +251,8 @@ end
 function generate_feasible_paths_for_generated_scenarios()
     #list of walking times
     walking_time_list = [5, 6, 7, 8, 10, 15]
-    all_station = potential_locations
+    all_station = get_potential_locations()
+
     gen_sce_paths = filter!(x -> startswith(x, "scen"), readdir("Data/generated_scenario"))
     #loop over scenarios_paths
     for path in gen_sce_paths 
@@ -268,3 +273,43 @@ function generate_feasible_paths_for_generated_scenarios()
     end
 end
 
+#= 
+    create the set of instancies C1, ..., C4
+    the idea is to sample uniformly from 1:1000 a set of 200 scenarios, 4 times to 
+    construct the scenarios sets C_i for i ∈ {1, ..., 4}
+=#
+function construct_scenarios_sets()
+    #create the folder where the scenarios will be stored if not exists
+    if !isdir("Data/Instances/C1")
+        mkpath("Data/Instances/C1")
+        mkpath("Data/Instances/C2")
+        mkpath("Data/Instances/C3")
+        mkpath("Data/Instances/C4")
+    end
+
+    #sample four time 200 scenarios from the 1000 scenarios
+    for i in 1:4
+        @info "constructing the set C$i"
+        #sample 200 scenarios
+        sampled_scenarios = sample(1:1000, 200, replace=false)
+        
+        #copy the corresponding files to the relative folder
+        for j in eachindex(sampled_scenarios)
+            sc = sampled_scenarios[j]
+            src_path = "Data/Scenarios_1000_greaterthan2/Output1000_$sc.txt"
+            
+            #copy the file
+            cp(src_path, "Data/Instances/C$i/Output1000_C$(i)_$(j).txt", force=true)
+        end
+        
+    end
+end
+
+#=
+    solve a set of scenarios  using Mixed Integer programming
+    we try to reproduce the Fig3 in Article [2]
+    references:
+    [2]: Hatice Çalık, Bernard Fortz. A Benders decomposition method for locating stations in a one-way electric 
+         car sharing system under demand uncertainty, Transportation Research Part B: Methodological, Volume 125,
+         2019, Pages 121-150, ISSN 0191-2615
+=#

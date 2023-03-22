@@ -11,7 +11,7 @@ q_s = [1] # the probabilty of each scenario here we are only consedring  one sce
 # batteru usage between the stations. get_trip_duration return percentage so we need to converted again to watt
 δ_ij = hcat([[get_trip_battery_consumption(J[i], J[j], Smart_ED) * β / 100 for i in eachindex(J)] for j in eachindex(J)]...) 
 
-d_ij = hcat([[get_trip_duration(J[i], J[j]) for i in eachindex(J)] for j in eachindex(J)]...) # driving time between stations
+d_ij = hcat([[get_trip_duration(J[i], J[j]) / time_slot_length for i in eachindex(J)] for j in eachindex(J)]...) # driving time between stations
 #d_w = hcat([[get_walking_time(i, J[j]) for i in 1:nv(manhaten_city_graph)] for j in eachindex(J)]...)# walking time between each node and each station
 #CSV.write("walking_time.csv", Tables.table(d_w), writeheader=false)
 dw_ij = readdlm(project_path("Data/MIP/walking_time.csv"), ',', Float64)
@@ -67,7 +67,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         #set the different variables for the MIP and try to preserve the same names as in the paper
         K_s = [scenarios[i].request_list for i in eachindex(scenarios)]
         K = vcat(K_s...) #set of all request in all scenarios
-        Δ_k = [get_trip_duration(req.ON, req.DN) * 1.1 for req in eachrow(K)] #time threshold of the trip duration for each request
+        Δ_k = [get_trip_duration(req.ON, req.DN) / time_slot_length * 1.1 for req in eachrow(K)] #time threshold of the trip duration for each request
 
         #generate the parameters
         b = zeros(Bool, nrow(H), length(J), length(T))
@@ -139,7 +139,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         #save the programme
         write_to_file(mip, mip_file_path)
     end
-    set_optimizer(mip, Gurobi.Optimizer)
+    #set_optimizer(mip, Gurobi.Optimizer)
     #set_time_limit_sec(mip, 1200.0)
     set_silent(mip)
 
