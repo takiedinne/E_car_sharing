@@ -313,3 +313,35 @@ end
          car sharing system under demand uncertainty, Transportation Research Part B: Methodological, Volume 125,
          2019, Pages 121-150, ISSN 0191-2615
 =#
+
+function solve_Ci_set_with_MIP()
+    # make sure that we are working with time slot
+    global work_with_time_slot
+    if !work_with_time_slot
+        work_with_time_slot = true
+        @warn "The working with time slot is set to true!"
+    end
+
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/mixed_integer_programming_experiment")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment,"/MIP_", now(), ".csv")
+    
+    # parameters for the experiments
+    scenarios_sets = ["C1", "C2", "C3", "C4"]
+    nbr_scenario_list = [100, 200]
+    nbr_requests_list = [1000]
+    walking_time_list = [5, 6, 7, 8, 9, 10, 15]
+    costs_factors = [10^5, 10^6]
+
+    for (set, ns, nr, wt) in Iterators.product(scenarios_sets, nbr_scenario_list, nbr_requests_list, walking_time_list)
+        @info "[Ci MIP experiment 2019]: set = $set, number of scenarios = $ns, number of requests = $nr, walking time = $wt"
+        
+        #prepare the scenarios
+        scenarios = [initialize_scenario(project_path("Data/Instances/$set/Output1000_$(set)_$(i).txt")) for i in 1:ns]
+
+    end
+
+end
