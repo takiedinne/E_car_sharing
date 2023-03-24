@@ -4,3 +4,7 @@ using DataFrames
 const e = E_car_sharing
 
 e.preprocessing_experiment2019()
+
+using SparseArrayKit
+
+a = SparseArray{Bool}(undef, 5120000, 85, 300)

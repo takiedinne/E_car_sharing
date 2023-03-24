@@ -249,9 +249,9 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, m
                             =#
 
                             start_time = req.ST * time_slot_length + walking_time_to_origin_station
-                            work_with_time_slot == true && (start_time = ceil(Int, start_time / time_slot_length))
+                            work_with_time_slot == true && (start_time = ceil(Int, start_time / time_slot_length) + 1 )
                             
-                            arriving_time = start_time + (work_with_time_slot == true ? ceil(Int, trip_duration/time_slot_length) : trip_duration)
+                            arriving_time = start_time + (work_with_time_slot == true ? ceil(Int, trip_duration/time_slot_length) + 1 : trip_duration)
 
                             push!(paths, (req.reqId, origin_station_id, destination_station_id, start_time, arriving_time, req.Rev))
                         end
@@ -275,10 +275,14 @@ end
         scenario: the object of type scenario
  =#
 function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
-    #println("we are initializing scenarion number $id")
-    file_path = serialized_scenarios_folder * "/scenario$id.sc"
-    if check_file && isfile(file_path)
-        deserialize(file_path)
+    
+    # Replace "scenario_txt_files" with "scenarios_obj"
+    serialized_file = replace(scenario_path, "scenario_txt_files" => "scenarios_objects")
+    # Replace ".txt" with ".jls"
+    serialized_file = replace(serialized_file, r"\.txt$" => "_$(maximum_walking_time)_walking_time.jls")
+
+    if check_file && isfile(serialized_file)
+        deserialize(serialized_file)
     else
        
         # construct the requests lists 
@@ -302,7 +306,10 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
         end 
         requests_list.fp = feasible_paths_ranges
         sc = Scenario(id, requests_list, afp)
-        id != -1 && serialize(file_path, sc)
+
+        # save the file
+        !isdir(dirname(serialized_file)) && mkpath(dirname(serialized_file))
+        serialize(serialized_file, sc)
         sc
     end
 end

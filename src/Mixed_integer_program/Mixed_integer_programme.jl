@@ -4,8 +4,8 @@ f_j = [get_prop(manhaten_city_graph, i, :charging_station_base_cost) for i in J]
 g = vehicle_specific_values[Smart_ED][:car_cost] # the cost of purchasing the car 
 C_j = [get_prop(manhaten_city_graph, j, :max_number_of_charging_points) for j in J] # the capacity of each station
 T = collect(Int64, 1:300) # set of time slots
-S = collect(1:1) # we are  only considering one scenario at a time
-q_s = [1] # the probabilty of each scenario here we are only consedring  one scenario
+S = collect(1:1) # to redefine
+q_s = [1] # to redefine
 
 β = vehicle_specific_values[Smart_ED][:battery_capacity] # battery capacity
 # batteru usage between the stations. get_trip_duration return percentage so we need to converted again to watt
@@ -41,6 +41,7 @@ end
     @genarated_scenarios (optional): if the scenarios are amoung the generated scenario or false when we are using the already exist scenarios
 =#
 function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarated_scenarios = false, mip_file_path="")
+    
     # we make a convention that the file is names as "E_carsharing_mip_1_to_$(nbr_of_scenarios).mof.json"
     # so is we wanted to solve 5 scenarions so the name will be  "E_carsharing_mip_1_to_5.mof.json"
     if mip_file_path == ""
@@ -60,20 +61,26 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
     
     Hs = [scenarios[i].feasible_paths  for i in eachindex(scenarios)]# all feasible paths
     H = vcat(Hs...)
-
+   
     if isfile(mip_file_path)
         mip = read_from_file(mip_file_path)
     else
+        @info "[Solving the MIP]: creating the MIP ..."
         #set the different variables for the MIP and try to preserve the same names as in the paper
         K_s = [scenarios[i].request_list for i in eachindex(scenarios)]
         K = vcat(K_s...) #set of all request in all scenarios
         Δ_k = [get_trip_duration(req.ON, req.DN) / time_slot_length * 1.1 for req in eachrow(K)] #time threshold of the trip duration for each request
+        
+        S = collect(1:length(scenarios)) 
+        # at this stage we are not taking in consideration the probability of each scenario
+        q_s = 1 / length(scenarios) .* ones(length(scenarios)) 
 
+        @info "[Solving the MIP]: creating the variables ..."
         #generate the parameters
-        b = zeros(Bool, nrow(H), length(J), length(T))
-        μ = zeros(Bool, nrow(H), length(J), length(T))
-        λ = zeros(Bool, nrow(H), length(J), length(T))
-
+        b = SparseArray{Bool}(undef, nrow(H), length(J), length(T)) 
+        μ = SparseArray{Bool}(undef, nrow(H), length(J), length(T)) 
+        λ = SparseArray{Bool}(undef, nrow(H), length(J), length(T))
+        
         for h in 1:nrow(H)
             # set bata
             start_station_id = stations_idx[H.origin_station[h]]
@@ -89,7 +96,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
             # set λ
             λ[h, destination_station_id, end_charging_time_slot+1] = 1
         end
-        @info "constructing the MIP"
+       
         # define the variables
         @variable(mip, u_h[1:nrow(H)], Bin) # u_h 1 if the trip in H is used 0 otherwise
         @variable(mip, L_ts[eachindex(J), eachindex(T), eachindex(S)] >= 0, Int)
@@ -97,7 +104,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         @variable(mip, y[eachindex(J)], Bin)
 
         # List constraints
-
+        @info "[Solving the MIP]: creating the constraints ..."
         #constraints (2)
         #@constraint(mip, c2[i=1:nrow(K)], sum(u_h[j] for j in findall(x -> x == K.reqId[i], H.req)) <= 1 )
         @constraint(mip, c2[i=1:nrow(K)], sum(u_h[j] for j in findall((H.req .== K.reqId[i]) .& (H.scenarioId .== K.scenarioId[i]))) <= 1)
@@ -139,20 +146,29 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         #save the programme
         write_to_file(mip, mip_file_path)
     end
-    #set_optimizer(mip, Gurobi.Optimizer)
-    #set_time_limit_sec(mip, 1200.0)
+    set_optimizer(mip, Gurobi.Optimizer)
+    set_time_limit_sec(mip, 3600.0)
     set_silent(mip)
 
     @info "solving the mip ..."
     optimize!(mip)
 
-    obj_val = objective_value(mip)
-    sol_df = DataFrame(x=name.(all_variables(mip)), val=JuMP.value.(all_variables(mip)))
-
-    sol = create_solution_for_simulation(sol_df, H)
+    ter_stat = termination_status(mip)
+    if ter_stat in [MOI.OPTIMAL, MOI.LOCALLY_SOLVED, MOI.TIME_LIMIT]
+        if ter_stat == MOI.TIME_LIMIT
+            @warn "Time limit reached"
+        end
+        obj_val = objective_value(mip)
+        cpu_time = solve_time(mip)
+        sol_df = DataFrame(x=name.(all_variables(mip)), val=JuMP.value.(all_variables(mip)))
     
-    # return
-    obj_val, sol
+        sol = create_solution_for_simulation(sol_df, H)
+        
+        # return
+        return obj_val, sol, cpu_time
+    end
+   
+    return Inf, nothing, nothing
     
 end
 

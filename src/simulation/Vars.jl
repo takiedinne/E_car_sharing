@@ -40,7 +40,7 @@ else
     global Manhatten_network_details_file = project_path("Data/Instances/manhattan-long-trips.xml") #the path of the file which contains the manhatten data
     global Manhatten_network_MetaDigraph_file = project_path("Data/other/manhatten_MetaDiGraph.mg")
     global Manhatten_network_Metagraph_file = project_path("Data/other/manhatten_MetaGraph.mg")
-    global scenarios_paths = project_path.("Data/Instances/Scenarios_1000_greaterthan2/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Scenarios_1000_greaterthan2"))))
+    global scenarios_paths = project_path.("Data/Instances/Scenarios_1000_greaterthan2/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Instances/Scenarios_1000_greaterthan2"))))
     global serialized_scenarios_folder = project_path("Data/nstances/Scenarios_1000_greaterthan2/scenarios_objects")
     #general parameters for the simulation:
     global maximum_walking_time = 5 # in min

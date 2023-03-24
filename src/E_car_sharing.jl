@@ -20,6 +20,8 @@ using DelimitedFiles
 using Serialization
 using BenchmarkTools
 
+using SparseArrayKit
+
 
 
 include("simulation/data_structure.jl")

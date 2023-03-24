@@ -1,0 +1,19 @@
+# Base image
+FROM julia:latest
+
+# Set the working directory
+WORKDIR /app
+
+#make a directory for the data
+RUN mkdir E_car_sharing
+
+# Copy the current directory contents into the container at /app
+COPY . /app/E_car_sharing
+
+# add E_car_sharing as package
+RUN julia -e 'import Pkg; Pkg.develop(path="/app/E_car_sharing")'
+
+# Run the app when the container launches
+CMD ["julia", "-e", "using E_car_sharing; E_car_sharing.preprocessing_experiment()"]
+#CMD ["julia", "-e", "using E_car_sharing; E_car_sharing.preprocessing_experiment2019()"]
+
