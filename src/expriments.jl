@@ -389,28 +389,29 @@ function generate_feasible_paths_for_Ci()
 
     #loop over the sets
     for set in scenarios_sets
+        @info "generating feasible paths for the set $set"
         #scenarios_paths
-        scenarios_paths = filter!(x -> startswith(x, "Output1000"), readdir(project_path("Data/Instances/$set/scenario_txt_files")))
+        scenarios_paths = project_path.("Data/Instances/$set/scenario_txt_files/" .* filter!(x -> startswith(x, "Output1000"), readdir(project_path("Data/Instances/$set/scenario_txt_files"))))
 
         #loop over scenarios_paths
-        for path in scenarios_paths
-            for wt in  walking_time_list
-                #set the maximum walking time
-                global maximum_walking_time = wt
-                
-                #initialize the scenario (N.P: if it was initilized befor so the function will loadit directly)
-                current_scenario =  initialize_scenario(path)
+        for (path, wt) in Iterators.product(scenarios_paths, walking_time_list)
+            
+            #set the maximum walking time
+            global maximum_walking_time = wt
+            
+            #initialize the scenario (N.P: if it was initilized befor so the function will loadit directly)
+            current_scenario =  initialize_scenario(path)
 
-                fps = current_scenario.feasible_paths
-                
-                #save feasible paths the file
-                # Replace "scenario_txt_files" with "feasible_paths"
-                save_fps_path = replace(path, "scenario_txt_files" => "feasible_paths")
-                # Replace ".txt" with ".csv"
-                save_fps_path = replace(serialized_file, r"\.txt$" => "_$(maximum_walking_time)_walking_time.csv")
+            fps = current_scenario.feasible_paths
+            
+            #save feasible paths the file
+            # Replace "scenario_txt_files" with "feasible_paths"
+            save_fps_path = replace(path, "scenario_txt_files" => "feasible_paths")
+            # Replace ".txt" with ".csv"
+            save_fps_path = replace(save_fps_path, r"\.txt$" => "_$(maximum_walking_time)_walking_time.csv")
 
-                CSV.write(save_fps_path, fps)
-            end
+            CSV.write(save_fps_path, fps)
+            
         end
     
     end
