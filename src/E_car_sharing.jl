@@ -5,7 +5,6 @@ using SimJulia
 
 using DataFrames
 using CSV
-using Dates
 
 using Graphs, MetaGraphs
 using EzXML
@@ -22,8 +21,6 @@ using Serialization
 using BenchmarkTools
 
 using SparseArrayKit
-
-
 
 include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
@@ -49,5 +46,6 @@ export E_carsharing_sim,
     serve_requests_after_opening_station,
     set_walking_time,
     set_cost_factor,
-    project_path
+    project_path,
+    clean_up_cars_number!
 end

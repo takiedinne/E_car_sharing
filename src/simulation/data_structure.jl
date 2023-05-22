@@ -23,7 +23,7 @@ end
 
 Station(station_node_id::Int64, initial_cars_number::Int64, initial_id::Int64) = begin
     #get teh different information from the graph
-    prop_dict = props(manhaten_city_graph, station_node_id)
+    prop_dict = props(manhaten_city_driving_graph, station_node_id)
     
     total_parking_places = prop_dict[:max_number_of_charging_points]
     max_power = prop_dict[:max_power]

@@ -1,12 +1,12 @@
 
 global results_folder = project_path("results")
-#= 
+""" 
     this function has the role of validating the simulation model by comparing the results of the simulation
     with the results of the mixed Integer programming model.
     - for a set of scenarios we create a mixed integer programming model and solve it using Gurobi.
     - then we got the solutions and evalute them using the simulation
     - finaly we compare between the results of the simulation and the results of the mixed integer programming model. 
-=#
+"""
 function validate_simulation_model()
     #we consider onlt ten scenarios
     scenario_ids = collect(1:10)
@@ -57,7 +57,7 @@ function validate_simulation_model()
 
 end
 
-#= 
+""" 
     this is reproduction for the first experiment the article [1].
     the aim is to have an overview of the pre-processing function how many requests are accesible 
     for different maximum walking times, how many feasible paths are generated and the CPU time 
@@ -68,7 +68,7 @@ end
     [2]: Hatice Çalık, Bernard Fortz. A Benders decomposition method for locating stations in a one-way electric 
          car sharing system under demand uncertainty, Transportation Research Part B: Methodological, Volume 125,
          2019, Pages 121-150, ISSN 0191-2615
-=#
+"""
 function preprocessing_experiment()
     println("[preprocessing_experiment 2017]: start ...")
     # global variables
@@ -88,7 +88,7 @@ function preprocessing_experiment()
     
     #the result file
     
-    now_as_str = Dates.format(now(), "yyyy-mm-ddTHH_MM_SS")
+    #now_as_str = Dates.format(now(), "yyyy-mm-ddTHH_MM_SS")
     results_save_path = project_path(string(result_folder_for_this_experiment,"/PS_", now_as_str, ".csv"))
 
     all_station = get_potential_locations()
@@ -102,7 +102,7 @@ function preprocessing_experiment()
     for (nbr_requests, wt) in Iterators.product(nbr_requests_list, walking_time_list)
         # we are going to use the generated scenarios
         # set the file path
-        curr_sc_path = project_path("Data/generated_scenario/scenario_$(nbr_requests)_requests.txt")
+        curr_sc_path = project_path("Data/generated_scenario/scenario_txt_files/scenario_$(nbr_requests)_requests.txt")
         
         @info "[preprocessing experiment 2017]: ($nbr_requests,$wt)  is being tested ..."
         curr_requests_list = requests_as_dataframe(curr_sc_path)
@@ -121,14 +121,14 @@ function preprocessing_experiment()
     @info "[preprocessing Exp 2017]: The experiment is finished !"
 end
 
-#= 
+""" 
     As the previous experiment, we seek to see the number of accessible requests 
     as a function of Number of scenarios and maximum walking time.
     this experiment is the reproduction of the experiment conducted in [2] and results are presented in Fig 2 page 127
     references:
     [2]: Hatice çalik, Bernard fortz. Location of Stations in One-Way Electric Car sharing System.
          IEEE Symposium on Cpmputer and Communications, 2017 Heraklion, Greec. hal-01665609
- =#
+"""
 function preprocessing_experiment2019()
     @info "[preprocessing Exp 2019]: start ..."
     # global variables
@@ -145,7 +145,7 @@ function preprocessing_experiment2019()
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
-    now_as_str = Dates.format(now(), "yyyy-mm-ddTHH_MM_SS")
+    #now_as_str = Dates.format(now(), "yyyy-mm-ddTHH_MM_SS")
     results_save_path = project_path(string(result_folder_for_this_experiment,"/PS_scenarios_", now_as_str, ".csv"))
 
     all_station = get_potential_locations()
@@ -177,9 +177,10 @@ function preprocessing_experiment2019()
 end
 
 
-#= construct the scenarios for the next experiment 
+"""
+construct the scenarios for the next experiment 
     basically make  scenarios with n requests by concatinating the different request from the existing requests of 1000
-=#
+"""
 function construct_scenario_with_different_size(sizes::Vector{Int64})
     #the path where the file will be stored
     folder_path = project_path("Data/generated_scenario")
@@ -195,15 +196,15 @@ function construct_scenario_with_different_size(sizes::Vector{Int64})
         writedlm(file_path, requests_ids_list[1:s])
     end
 end
-#=
+"""
     this function solve the Mixed Integer programms and return the best value found
     the aim is to compare afterwords the result with the Hyper heuristic frame work 
     N.P: another same experiment will be done in Java counterpart to compare the results
-    The results can not be compared to TABLE II - IV in article [1] as we don't know what are the requests used. Nevertheless 
-    we can have an idea about the values ( it is always benificial to see if we are in the same range of values)
- =#
- 
-function mixed_integer_programming_experiment()
+    The results can not be compared to TABLE II - IV in article [1] as we don't know what are the requests used. 
+    Nevertheless, we can have an idea about the values ( it is always benificial to see if we are in the same range 
+    of values)
+"""
+function solve_generated_scenario_using_Gurobi()
     global work_with_time_slot
     # we will try to use the same variables name as the paper 
     if !work_with_time_slot
@@ -212,48 +213,65 @@ function mixed_integer_programming_experiment()
     end
 
     generated_scs_folder_path = project_path("Data/generated_scenario")
-    result_folder_for_this_experiment = string(results_folder, "/mixed_integer_programming_experiment")
+    result_folder_for_this_experiment = string(results_folder, "/GUROBI_for_generated_scenarios_2017")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
     results_save_path = string(result_folder_for_this_experiment,"/MIP_", now(), ".csv")
     
     #list of parameters
-    nbr_requests_list = [1000, 2000, 3000, 5000, 10000]
-    walking_time_list = [5, 6, 7, 8, 10, 15]
-    costs_factors_list = [10^4, 10^5, 10^6]
+    nbr_requests_list = [1000#= , 2000, 3000, 5000, 10000 =#]
+    walking_time_list = [5#= , 6, 7, 8, 10, 15 =#]
+    costs_factors_list = [#= 10^4, =# 10^5#= , 10^6 =#]
 
-    results_as_df = DataFrame(CF=[], K=[], β_w=[], PF_Opt=[], J_bar=[], K_bar=[], solver_time=[], total_time =[])
+    # we store theresults in a dataframe object
+    results_as_df = DataFrame(CF=[], K=[], β_w=[], PF_Opt=[], J_bar=[], K_bar=[], solver_time=[], total_time =[], termination_status=[])
     for (cf, nr, wt) in Iterators.product(costs_factors_list, nbr_requests_list, walking_time_list)
-        @info "[MIP experiment Cost factor = $cf]: solving a MIP with $nr requests and walking time equal to $wt..."
+        @info "[GUROBI Experiment]: cf = $cf, nr = $nr, wt = $wt is being solved ..."
         
-        file_path = string(generated_scs_folder_path, "/scenario_", nr,"_requests.txt")
-       
-        global maximum_walking_time = wt
-        global cost_factor = cf
-
-        #initialize the scenario
-        scenario = initialize_scenario(file_path, check_file=false)
-
+        #noramally all the MIPs are generated befor. However, we check again and if they don't exist we generate them
         # the mip file path where the MIP model will be saved
-        mip_file_path = "Data/MIP/programs_file/E_carsharing_mip_generated_$(nr)_requests_$(wt)_walking_time_$(cf)_CF_.mof.json"
-        
-        #solve the MIP
-        TT = @elapsed obj, sol, solve_time = solve_with_mixed_integer_program([scenario], mip_file_path)
+        mip_file_path = project_path("Data/MIP/programs_file/E_carsharing_mip_generated_$(nr)_requests_$(wt)_walking_time_$(cf)_cf.mof.json")
+        # path for the current Scenario
+        curr_sc_path = project_path("Data/generated_scenario/scenario_txt_files/scenario_$(nr)_requests.txt")
+        #initialize the scenario
+        scenario = initialize_scenario(curr_sc_path)
+        if !isfile(mip_file_path)
+            @warn "The MIP file is not found, it will be generated ..."
+            file_path = string(generated_scs_folder_path, "/scenario_txt_files/scenario_", nr,"_requests.txt")
+       
+            # set the global variables
+            global maximum_walking_time = wt
+            global cost_factor = cf
+
+            #create the MIPs and save them
+            create_MIP([scenario], save_mip_file = true, costs_factors_list = costs_factors_list,
+                    mip_file_root = "Data/MIP/programs_file/E_carsharing_mip_generated_$(nr)_requests_$(wt)_walking_time")
+        end
+        #=  
+            #here we are 100% sure that the MIP file exists. solve_using_mixed_integer_program as well can creat MIP
+            # Nevertheless, I decided to creat them manually as foreach pair of nr, wt we can create 3 MIPs (one for each cf) 
+            # by changing only the Objective function 
+        =#
+
+        #solve the MIP 
+        TT = @elapsed obj, sol, solve_duration, ter_stat = solve_using_mixed_integer_program([scenario], mip_file_path=mip_file_path )
         if obj == Inf
-            push!(results_as_df, [cf, nr, wt, obj, missing, missing, solve_time, TT])
+            push!(results_as_df, [cf, nr, wt, obj, missing, missing, solve_time, TT, ter_stat])
         else
-            push!(results_as_df, [cf, nr, wt, obj, sum(sol.open_stations_state), sum(sol.selected_paths[1]), solve_time, TT])
+            push!(results_as_df, [cf, nr, wt, obj, sum(sol.open_stations_state), sum(sol.selected_paths[1]), solve_time, TT, ter_stat])
 
             #save the sol file
-            save_sol_path = string(generated_scs_folder_path, "/serialized_solutions/sol_", nr,"_requests.jls")
+            save_sol_path = string(generated_scs_folder_path, "/serialized_solutions/sol_$(nr)_requests_$(wt)_walking_time_$(cf)_cf.jls")
             serialize(save_sol_path, sol)
         end
     end
     CSV.write(results_save_path, results_as_df)
 end
 
-#create a function to generate feasible paths for the generated scenarios
+"""
+    create a function to generate feasible paths for the generated scenarios
+"""
 function generate_feasible_paths_for_generated_scenarios()
     #list of walking times
     walking_time_list = [5, 6, 7, 8, 10, 15]
@@ -279,11 +297,11 @@ function generate_feasible_paths_for_generated_scenarios()
     end
 end
 
-#= 
+"""
     create the set of instancies C1, ..., C4
     the idea is to sample uniformly from 1:1000 a set of 200 scenarios, 4 times to 
     construct the scenarios sets C_i for i ∈ {1, ..., 4}
-=#
+"""
 function construct_scenarios_sets()
     #create the folder where the scenarios will be stored if not exists
     if !isdir("Data/Instances/C1")
@@ -311,15 +329,14 @@ function construct_scenarios_sets()
     end
 end
 
-#=
+"""
     solve a set of scenarios  using Mixed Integer programming
     we try to reproduce the Fig3 in Article [2]
     references:
     [2]: Hatice Çalık, Bernard Fortz. A Benders decomposition method for locating stations in a one-way electric 
          car sharing system under demand uncertainty, Transportation Research Part B: Methodological, Volume 125,
          2019, Pages 121-150, ISSN 0191-2615
-=#
-
+"""
 function solve_Ci_set_with_MIP()
     # make sure that we are working with time slot
     global work_with_time_slot
@@ -374,9 +391,10 @@ function solve_Ci_set_with_MIP()
     CSV.write(results_save_path, results_as_df)
 end
 
+
 """
+    create a function to generate feasible paths for the generated scenarios
 """
-#create a function to generate feasible paths for the generated scenarios
 function generate_feasible_paths_for_Ci()
     #list of walking times
     walking_time_list = [5, 6, 7, 8, 9, 10, 15]
@@ -416,5 +434,64 @@ function generate_feasible_paths_for_Ci()
     
     end
     
+end
+
+"""
+    function check_the_influence_of_the_defferences_with_hatice_preprocessing()
+    
+    try to see the infulence of the deferences between the preprocessing of Taki and Hatice.
+    for this experiment we have three type of speeds which affect the driving duration 
+        {fixed_driving_speed, multiple_driving_speeds, time_dependent_driving_speeds}
+    for the walking graph we have two types of graphs
+        {Directed, undirected}
+"""
+function check_the_influence_of_the_defferences_with_hatice_preprocessing()
+    #the parameters for the experiments
+    speed_types = ["multiple_driving_speeds", "multiple_driving_speeds", "fixed_driving_speed", "fixed_driving_speed"#= , "time_dependent_driving_speeds", "time_dependent_driving_speeds" =#]
+    walking_graph_types = ["Directed", "undirected", "Directed", "undirected"#= , "Directed", "undirected" =#]
+
+    multiple_driving_speeds_list = [true, true, false, false#= , false, false =#]
+    use_dynamic_speeds_list = [false, false, false, false#= , true, true =#]
+    walking_graph_types_list = [MetaDiGraph, MetaGraph, MetaDiGraph, MetaGraph#= , MetaDiGraph, MetaGraph =#]
+    
+
+    #the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/preprocessing_Taki_VS_Hatice")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = "$(result_folder_for_this_experiment)/Taki_Vs_hatice.csv"
+
+    # load the request of the scenario 
+    scenario_requests = requests_as_dataframe(project_path("Data/Instances/C1_5000_500/scenario_txt_files/Output_1.txt"))
+    
+    # result object as dataframe
+    results = DataFrame(speed_type = String[], walking_graph_type = String[], nbr_feasible_trips = Int64[], nbr_feasible_requests = Int64[])
+    
+    # try the get the feasible path for the scenario
+    for i in eachindex(multiple_driving_speeds_list)
+        
+        #set the values for each parameters
+        global multiple_driving_speeds = multiple_driving_speeds_list[i]
+        global use_dynamic_speeds = use_dynamic_speeds_list[i]
+        global graph_type = walking_graph_types_list[i]
+
+        @info "[preprocessing Taki vs hatice]: multiple_driving_speeds = $multiple_driving_speeds, use_dynamic_speeds = $use_dynamic_speeds, graph_type = $graph_type"
+        
+        # load the adequate driving graph
+        global manhaten_city_driving_graph = (multiple_driving_speeds) ? loadgraph(Manhatten_network_driving_graph_file, MGFormat()) : loadgraph(Manhatten_network_length_graph_file, MGFormat())
+        global manhaten_city_length_graph = graph_type(loadgraph(Manhatten_network_length_graph_file, MGFormat()))
+
+        #clean up the walking_time_list
+        empty!(shortest_car_paths)
+        empty!(shortest_walking_paths)
+
+        #get the feasible paths
+        feasible_paths = get_feasible_paths(scenario_requests, get_potential_locations(), 5)
+
+        push!(results, [speed_types[i], walking_graph_types[i], nrow(feasible_paths), length(unique(feasible_paths.req))])
+
+    end
+    CSV.write(results_save_path, results)
 end
 

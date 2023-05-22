@@ -1,15 +1,20 @@
 
 ######################### General functions ############################
-#=
-    description: create the graph of the city to solve the path problems using djisktra as an example
-    inputs:
-        @xml_path => the file where the data are stored (e.g., longitude, latitude, etc)
-        @save_file (optional) => the path where the MetaDiGraph object will be stored
-    outputs:
-       MetaDiGraph object => the created network
-=#
-function create_graph_from_XML(xml_path::String; save_file::String="", GraphType=MetaGraph)
+"""
+    create_graph_from_XML(xml_path::String; save_file::String="", GraphType=MetaGraph, weights_from="length")
+    
+description: create the graph of the city to solve the path problems using djisktra as an example
+inputs:
+    @xml_path => the file where the data are stored (e.g., longitude, latitude, etc)
+    @save_file (optional) => the path where the MetaDiGraph object will be stored
+    @GraphType (optional) => the type of graph to be created (MetaGraph or MetaDiGraph)
+    @weights_from (optional) => the type of weights to be used (length, walking_time, driving_time)
+outputs:
+       Meta(Di)Graph object => the created network
+"""
+function create_graph_from_XML(xml_path::String; save_file::String="", GraphType=MetaGraph, weights_from="length")
     @assert GraphType in [MetaGraph, MetaDiGraph] "the graph Type need to be Meta(Di)Graph "
+    @assert weights_from in ["length", "walking_time", "driving_time"] "the weights_from need to be length, walking_time or driving_time"
     
     doc = readxml(xml_path)
 
@@ -104,15 +109,21 @@ function create_graph_from_XML(xml_path::String; save_file::String="", GraphType
         length = parse(Float64, nodecontent(child_elems[1]))
         frc = parse(Float64, nodecontent(elements(child_elems[2])[1]))
         maxSpeed = parse(Float64, nodecontent(elements(child_elems[2])[2]))
-
-        properties = Dict(:weight => length, :frc => frc, :maxSpeed => maxSpeed)
+        # here we see which weight we use
+        if weights_from == "length"
+            weight = length
+        elseif weights_from == "walking_time"
+            weight = ceil(Int,length / 1.34) # is in second
+        elseif weights_from == "driving_time"
+            weight = ceil(Int, length / maxSpeed / 1000 * 3600) # convert to seconds
+        end
+        properties = Dict(:weight => weight, :frc => frc, :maxSpeed => maxSpeed)
         # add the add_edge 
         if !add_edge!(graph, tail, head, properties)
             if has_edge(graph, tail, head)
-                if properties[:weight] < get_prop(graph, tail, head, :weight) #= && properties[:weight] != 0 =#
+                #=if true  properties[:weight] < get_prop(graph, tail, head, :weight)  && properties[:weight] != 0 =#
                     set_prop!(graph, tail, head, :weight, properties[:weight])
-                end
-
+                #end
             end
         end
     end
@@ -123,13 +134,13 @@ function create_graph_from_XML(xml_path::String; save_file::String="", GraphType
     graph
 end
 
-function draw_graph_and_scenario(manhaten_city_graph, scenario)
+function draw_graph_and_scenario(manhaten_city_driving_graph, scenario)
     cols = []
     node_size = Array{Real,1}()
-    node_marker = [:circle for i in 0:nv(manhaten_city_graph)-1]
+    node_marker = [:circle for i in 0:nv(manhaten_city_driving_graph)-1]
 
-    for i in 1:nv(manhaten_city_graph)
-        if get_prop(manhaten_city_graph, i, :type) == 2
+    for i in 1:nv(manhaten_city_driving_graph)
+        if get_prop(manhaten_city_driving_graph, i, :type) == 2
             push!(node_size, 40)
             push!(cols, :blue)
             node_marker[i] = :rect
@@ -153,15 +164,15 @@ function draw_graph_and_scenario(manhaten_city_graph, scenario)
     end
 
     edge_labels = String[]
-    for e in collect(edges(manhaten_city_graph))
-        weight = get_prop(manhaten_city_graph, e.src, e.dst, :weight)
+    for e in collect(edges(manhaten_city_driving_graph))
+        weight = get_prop(manhaten_city_driving_graph, e.src, e.dst, :weight)
         push!(edge_labels, string(weight))
     end
 
-    f, ax, p = graphplot(manhaten_city_graph, edge_width=[3 for i in 1:ne(manhaten_city_graph)],
+    f, ax, p = graphplot(manhaten_city_driving_graph, edge_width=[3 for i in 1:ne(manhaten_city_driving_graph)],
         node_size=node_size,
         node_color=cols,
-        nlabels=[string(i) for i in 1:nv(manhaten_city_graph)],
+        nlabels=[string(i) for i in 1:nv(manhaten_city_driving_graph)],
         elabels=edge_labels,
         node_marker=node_marker)
 
@@ -173,18 +184,57 @@ function draw_graph_and_scenario(manhaten_city_graph, scenario)
 
     f
 end
+
+"""
+    load_travel_speed() charge the travel speeds from the Instance file
+
+    it return Dict((frc, maxSpeed) => travel_speeds) where for each tuple of (frc, max_speed) => travel_speeds)
+    
+    frc: functional road class 
+    max_speed: the maximum speed allowed on the road
+    travel_speeds: the travel speed for each hour of the day 
+
+    it is useful to calculate the driving time
+"""
+function load_travel_speed()
+    # the path where the travel_speeds file is located (or will be stored)
+    global travel_speed_file_path
+
+    if isfile(travel_speed_file_path)
+        travel_speeds = deserialize(travel_speed_file_path)
+    else
+        #read the instance  XML file
+        doc = readxml(Manhatten_network_details_file)
+        # point to the travel_speeds nodes
+        travel_speeds_nodes = findall("//travel_speed", doc)
+        # the dict that will store the traveling speeds for each hour in a day 
+        travel_speeds = Dict{Tuple, Array{Float64, 1}}()
+        # iterate over the travel_speeds nodes
+        for current_node in travel_speeds_nodes
+            travel_speed_as_str = nodecontent(current_node)
+            travel_speed = parse.(Float64, split(travel_speed_as_str))[1:24] # all the days are equal I check it !!
+            frc =   parse(Int64, current_node["frc"])
+            max_speed = parse(Int64, current_node["maxSpeed"])
+            # push the travleing time to the dictionnary
+            travel_speeds[(frc, max_speed)] = travel_speed   
+        end
+        serialize(travel_speed_file_path, travel_speeds)
+    end
+    travel_speeds
+end
 ######################## Scenario functions ###########################
-#=
+"""
+    requests_as_dataframe(scenario_path::String)
     inputs: 
-        @scenario_path => the path of the file wich contain the scenarion details
+        @scenario_path => the path of the file wich contain the scenario details
     output:
         scenario_df => list of requests with ther details as dataFrame
-=#
+"""
 function requests_as_dataframe(scenario_path::String)
     # the scenario file contains only the id of the requests
     scenario_requests_list_df = CSV.read(scenario_path, DataFrame, header=false)
     rename!(scenario_requests_list_df, :Column1 => :reqId)
-
+    
     #perform the join instruction to get all the details of the requests 
     scenario_df = innerjoin(all_request_df, scenario_requests_list_df, on=:reqId)
     # sort the request according to their arriving time
@@ -198,62 +248,67 @@ function requests_as_dataframe(scenario_path::String)
     return scenario_df
 end
 
-#=
+"""
     the preprocessing procedure
-=#
+"""
 
-function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, maximum_walking_time)
+function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, β_w)
+    global work_with_time_slot
+
     paths = DataFrame(req=Int64[], origin_station=Int64[], destination_station=Int64[], start_driving_time=[], arriving_time=[], Rev=[])
-    β_w = maximum_walking_time
+   
     for req in eachrow(requests_list)
-        
         print_preprocessing && println("we are with req ", req.reqId)
+        γ = ceil(Int, 1.1 * (req.TrT * 60)) # gamma for this request
+        
         #check all possible starting station
         for origin_station_id in stations
+            walking_time_to_origin_station = get_walking_time(req.ON, origin_station_id, unit = "seconds")
             
-            walking_time_to_origin_station = get_walking_time(req.ON, origin_station_id)
+            # the expected starting time 
+            start_driving_time = (req.ST * 5 * 60) + walking_time_to_origin_station # seconds
+            
             print_preprocessing && println("--> walking duration from ", req.ON, " to the station $origin_station_id is $walking_time_to_origin_station")
+            
+            #push!(jl_df, (req.ON, req.DN, origin_station_id, walking_time_to_origin_station))
+           
             #check accessibilty to the origin station (walking time)
-            if walking_time_to_origin_station <= β_w
-
+            if walking_time_to_origin_station <= (β_w * 60)
+                               
                 print_preprocessing && println("---->the origin station $origin_station_id is accesible")
+                
                 #check the ending station
                 for destination_station_id in stations
+                    #skip the same station
                     if destination_station_id == origin_station_id
                         continue
                     end
-                    walking_time_to_destination_node = get_walking_time(destination_station_id, req.DN)
+                    walking_time_to_destination_node = get_walking_time(destination_station_id, req.DN, unit = "seconds")
+                    
                     print_preprocessing && println("---->walking duration from station $destination_station_id to distination node ", req.DN, " is $walking_time_to_destination_node")
 
-                    if walking_time_to_destination_node <= β_w
+                    if walking_time_to_destination_node <= β_w * 60
+                        
+
                         print_preprocessing && println("------>the destination node is accesible from the station $destination_station_id")
                         #check the total length
-                        trip_duration = get_trip_duration(origin_station_id, destination_station_id)
-                        if trip_duration == Inf
-                            #there is no path which link, the two stations
-                            continue
-                        end
-
-                        total_time_for_trip = walking_time_to_destination_node + walking_time_to_origin_station + trip_duration
-                        print_preprocessing && println("-------->the total trip duration considering start station $origin_station_id and destination station $destination_station_id is $total_time_for_trip")
+                        driving_duration = get_trip_duration(origin_station_id, destination_station_id, start_driving_time, unit = "seconds")
+                        
+                        total_trip_duration = #= walking_time_to_destination_node + walking_time_to_origin_station +  =# driving_duration
+                        print_preprocessing && println("-------->the total trip duration considering start station $origin_station_id and destination station $destination_station_id is $total_trip_duration")
                         # check the total length of the trip constraints
-
-                        if total_time_for_trip <= 1.1 * get_trip_duration(req.ON, req.DN) &&
-                            get_trip_battery_consumption(origin_station_id, destination_station_id, Smart_ED) <= get_battery_level_needed(())
-                            
+                       
+                        if  total_trip_duration <= γ 
                             print_preprocessing && println("---------->the trip is accepted")
-
-                            #=  
-                                as the times in the scenario files represents the number of time slots so we have 
-                                to do some special treatement 
-                            =#
-
-                            start_time = req.ST * time_slot_length + walking_time_to_origin_station
-                            work_with_time_slot == true && (start_time = ceil(Int, start_time / time_slot_length) + 1 )
-                            
-                            arriving_time = start_time + (work_with_time_slot == true ? ceil(Int, trip_duration/time_slot_length) + 1 : trip_duration)
-
-                            push!(paths, (req.reqId, origin_station_id, destination_station_id, start_time, arriving_time, req.Rev))
+                           
+                            if work_with_time_slot
+                                # special traitement to get time slots indexes
+                                start_driving_slot_id = ceil(Int, start_driving_time / 60 / time_slot_length) + 1 # converted it to minutes and then to time slots index
+                                end_driving_slot_id = ceil(Int, driving_duration / 60 / time_slot_length) + start_driving_slot_id
+                                push!(paths, (req.reqId, origin_station_id, destination_station_id, start_driving_slot_id, end_driving_slot_id, req.Rev))
+                            else
+                                push!(paths, (req.reqId, origin_station_id, destination_station_id, start_driving_time, arriving_time, req.Rev))
+                            end
                         end
                     end
                 end
@@ -264,7 +319,7 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, m
     paths
 end
 
-#=
+"""
     description: create the scenario object which gather the requests list and their feasible paths
     inputs:
         @scenario_path: the path to the file where the request od the scenario are stored
@@ -273,7 +328,7 @@ end
                       and if so it will return the serialized object
     outputs:
         scenario: the object of type scenario
- =#
+"""
 function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
     
     # Replace "scenario_txt_files" with "scenarios_obj"
@@ -282,7 +337,9 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
     serialized_file = replace(serialized_file, r"\.txt$" => "_$(maximum_walking_time)_walking_time.jls")
 
     if check_file && isfile(serialized_file)
-        deserialize(serialized_file)
+        sc = deserialize(serialized_file)
+        sc.scenario_id = id
+        sc 
     else
        
         # construct the requests lists 
@@ -318,9 +375,8 @@ function initialize_scenarios(scenario_idx::Array{Int64,1})
     global scenarios_paths
     global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
 end
-
 ########################### Simulation functions ###################################
-#=
+"""
     description: GET ALL THE INFORMATION RELATIVE TO THE REQUEST
     inputs: 
         @req => the request to be served
@@ -331,7 +387,7 @@ end
         drop_off_station_id => the id the drop off station
         selected_car_id => the id of the car to be used to perform the trip
         parking_place_id => the id of the parking place in the drop off station
-=#
+"""
 function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, current_time)
     # vars to return 
     pickup_station_id = -1
@@ -349,13 +405,14 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
 
         #check if the stations are opened
         if !sol.open_stations_state[pickup_station_id] || !sol.open_stations_state[drop_off_station_id]
-            #one of the stations is close
+            # at least one of the stations is close
             continue
         end
 
         battery_level_needed = get_battery_level_needed(path) # always 100%
-        expected_start_riding_time = current_time + get_walking_time(req.ON, path.origin_station[1])
-
+        
+        expected_start_riding_time = path.start_driving_time #= current_time + get_walking_time(req.ON, path.origin_station[1]) =#
+        
         #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
         available_car_df = filter(row -> row.status == CAR_PARKED ||
                 (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_start_riding_time),
@@ -372,9 +429,10 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
             car_index = findall(x -> x >= battery_level_needed, expected_battery_levels)
 
             if !isempty(car_index)
-                # here at least there is a car that meet the consumption constraint
+                # here at least there is a car that meets the consumption constraint
+                selected_car_id = available_car_df[nrow(available_car_df), :].car_id
 
-                # first we privilege a parked car
+                #= # first we privilege a parked car
                 potential_selected_parked_cars_df = filter(row -> row.status == CAR_PARKED, available_car_df[car_index, :])
                 if !isempty(potential_selected_parked_cars_df)
                     # simply we select the first one --> or we can privilege  the car that has the maximum battery level
@@ -382,7 +440,7 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
                 else
                     # or we select a comming car
                     selected_car_id = available_car_df[1, :].car_id
-                end
+                end =#
             end
         end
 
@@ -393,7 +451,7 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
         end
 
         #check the availability of the parking place (free places + expected to be free places)
-        expected_arrival_time = expected_start_riding_time + get_trip_duration(path.origin_station[1], path.destination_station[1])
+        expected_arrival_time = expected_start_riding_time + get_trip_duration(path.origin_station[1], path.destination_station[1], expected_start_riding_time)
         # first we group all the information in one Dataframe
         parking_and_cars_df = leftjoin(stations[drop_off_station_id].parking_places, stations[drop_off_station_id].cars, on=:cars => :car_id, makeunique=true)
 
@@ -426,57 +484,169 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
     return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
 
 end
+"""
+    get_walking_time(id_node1, id_node2)
+    returning the walking time between two nodes in minutes
+    it uses the manhatten_city_walking_graph
 
-function get_walking_time(id_node1, id_node2)
+    if multiple_driving_speeds is true, then the walking time is rounded up to the next integer
+    else the walking time is computed using the walking speed and no rounding is applied
+"""
+function get_walking_time(id_node1, id_node2; unit::String="minutes")
+    @assert unit in ["minutes", "seconds"] "unit must be either minutes or seconds"
     if id_node1 ∉ keys(shortest_walking_paths)
-        merge!(shortest_walking_paths, Dict(id_node1 => dijkstra_shortest_paths(non_directed_manhaten_city_graph, [id_node1])))
+        merge!(shortest_walking_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_length_graph, [id_node1])))
     end
-
-    walking_time = shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / 60
-    #work_with_time_slot && walking_time != Inf && (walking_time = ceil(Int64, walking_time / time_slot_length))
-
-    walking_time
+    conversion_factor = unit == "minutes" ? 60 : 1
+    if shortest_walking_paths[id_node1].dists[id_node2] != Inf
+        walking_time = (multiple_driving_speeds == true) ? ceil(Int, (shortest_walking_paths[id_node1].dists[id_node2] / walking_speed) / conversion_factor) : 
+                                        (shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / conversion_factor) 
+    
+        walking_time
+    else
+        Inf
+    end
 end
 
-#= 
-    description : get the driving time between wo nodes
-=#
-function get_trip_duration(id_node1, id_node2)
+"""
+    get_trip_duration(id_node1, id_node2, strat_driving_time)
+
+    get the driving time between two nodes in minutes
+    it uses the manhatten_city_driving_graph
+    if global use_dynamic_speed is true then the driving time is computed using the dynamic speed
+    else the driving time is computed using the fixed_driving_speed
+
+    if multiple_driving_speeds is true, then the driving time is rounded up to the next integer
+    else the driving time is computed using the a fixed driving speed and no rounding is applied
+"""
+function get_trip_duration(id_node1, id_node2, strat_driving_time; unit::String="minutes")
+    @assert unit in ["minutes", "seconds"] "unit must be either minutes or seconds"
+    # check if we count the driving time using the MaxSpeed or dynamic speeds
+    if use_dynamic_speeds
+        return get_trip_duration_with_dynamic_speed(id_node1, id_node2, strat_driving_time, unit=unit)
+    end
+    # 
     if id_node1 ∉ keys(shortest_car_paths)
-        merge!(shortest_car_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_graph, [id_node1])))
+       shortest_car_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_driving_graph, [id_node1])
     end
-
-    driving_duration = shortest_car_paths[id_node1].dists[id_node2] / driving_speed / 1000 * 60 # convert it to minutes 
-    #work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
-    driving_duration
+    conversion_factor = unit == "minutes" ? 60 : 1
+    if shortest_car_paths[id_node1].dists[id_node2] != Inf
+        driving_duration = (multiple_driving_speeds == true) ? ceil(shortest_car_paths[id_node1].dists[id_node2] / conversion_factor) :
+                                                    shortest_car_paths[id_node1].dists[id_node2] / fixed_driving_speed / 1000 * conversion_factor 
+        
+        driving_duration
+    else 
+        Inf
+    end
 end
 
+"""
+    spath(dist, shortest_path_state, src)
+get the shortest path between two nodes src -> dist
+
+    @inputs:
+        dist::Int64 : the id of the destination node
+        shortest_path_state:: the results of Dijsktra algoritme after applying it to the graph and src node
+        src::Int64 : the id of the origin node
+
+"""
+spath(dist, shortest_path_state, src) = dist == src ? dist : [spath(shortest_path_state.parents[dist], shortest_path_state, src) dist]
+
+"""
+    get_trip_duration_with_frc(id_node1::Int64, id_node2::Int64, start_time::Number; unit::String="minutes)
+    
+    get traveling time between two nodes by not using a fixed driving speed but a variant one depending on the time
+    it uses the matrices from the xml file which give the speed for each road segment at each time.
+    in this first version we take the shortest path in terms of length and then we compute the time using the speed matrix
+
+    input:
+        id_node1::Int64 : the id of the origin node
+        id_node2::Int64 : the id of the distination node
+        start_driving_time::Float64 : the time when the trip starts in seconds
+        unit::
+"""
+
+function get_trip_duration_with_dynamic_speed(id_node1::Int64, id_node2::Int64, start_driving_time::Number; unit::String="minutes")
+    if id_node1 ∉ keys(shortest_car_paths)
+        shortest_car_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_length_graph, [id_node1])
+    end
+    #check if the id_node2 can be achived from id_node1
+    if shortest_car_paths[id_node1].dists[id_node2] == Inf
+        return Inf
+    else 
+        path = spath(id_node2, shortest_car_paths[id_node1], id_node1)
+        #convert matrix to Array
+        path = [path[1, i] for i in 1:size(path)[2]]
+        
+        current_hour = start_driving_time == 0.0 ? 1 : ceil(Int64, start_driving_time / 3600) 
+        driving_duration = 0 #seconds
+        path_length = length(path)
+        travel_speeds = load_travel_speed() #load the travel speed for each hour 
+        for i in 2:path_length
+            #get the frc and max speed
+            edge_infos = props(manhaten_city_driving_graph, path[i-1], path[i])
+            frc = edge_infos[:frc]
+            max_speed = edge_infos[:maxSpeed]# km/s
+            edge_length = edge_infos[:weight]# meters
+
+            #as we have values that are not shown in the Insatnce file (xml) I rounded them up to solve the problem
+            max_speed = ceil(max_speed/10) * 10
+            
+            #get the speed for thi edge on this hour
+            speed =  travel_speeds[(frc, max_speed)][current_hour] # m/s
+            driving_duration += edge_length / speed 
+
+            #count the new current hour
+            current_hour = ceil(Int64, (start_driving_time + driving_duration) / 3600)
+            
+            if current_hour > 24
+                current_hour %= 24
+            end
+        end
+        return driving_duration / 60 # convert it ro minuts
+    end
+end
+
+"""
+    description : get the distance between two nodes ( meters)
+"""
 function get_trip_distance(id_node1, id_node2)
     if id_node1 ∉ keys(shortest_car_paths)
-        merge!(shortest_car_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_graph, [id_node1])))
+        merge!(shortest_car_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_driving_graph, [id_node1])))
     end
     distance = shortest_car_paths[id_node1].dists[id_node2]
     distance
 end
+"""
+    get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
 
+get the battery consumtion of the trip between two nodes
+
+    @inputs:
+        id_node1::Int64 : the id of the origin node
+        id_node2::Int64 : the id of the distination node
+        Tcar::car_type : the type of the car
+
+    @outputs:
+        percentage_energy_consumption::Float64 : the percentage of the battery that will be consumed
+"""
 function get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
     α = vehicle_specific_values[Tcar][:α]
     β = vehicle_specific_values[Tcar][:β]
     γ = vehicle_specific_values[Tcar][:γ]
-    vij = driving_speed * 1000 / 3600
+    vij = fixed_driving_speed * 1000 / 3600
     battery_capacity = vehicle_specific_values[Tcar][:battery_capacity]
 
     distance = get_trip_distance(id_node1, id_node2)
     percentage_energy_consumption = distance * (α + β * vij^2 + γ / vij) / battery_capacity * 100
 
     percentage_energy_consumption
-    #total_distance = battery_capacity / (α + β * driving_speed^2 + γ / driving_speed)
 end
 
 function get_potential_locations()
     global potential_locations
     if length(potential_locations) == 0
-        potential_locations = collect(filter_vertices(manhaten_city_graph, :type, 2))
+        potential_locations = collect(filter_vertices(manhaten_city_driving_graph, :type, 2))
     end
     potential_locations
 end
@@ -485,9 +655,9 @@ function get_battery_level_needed(path)
     return 100
 end
 
-#=
+"""
     this function calculate the expected battery level at time @time (input)
-=#
+"""
 function get_expected_battery_levels(available_cars::DataFrame, time)
     expected_battery_level = copy(available_cars.last_battery_level)
 
@@ -508,9 +678,9 @@ function get_expected_battery_levels(available_cars::DataFrame, time)
     expected_battery_level
 end
 
-#=
+"""
     this function recounts the battery level of the cars in the station 
-=#
+"""
 function refrech_battery_levels(station_id::Int64, current_time)
     for car in eachrow(stations[station_id].cars)
 
@@ -528,7 +698,7 @@ function refrech_battery_levels(station_id::Int64, current_time)
     end
 end
 
-#=
+"""
     in this function we don't do any check about the paramaters. the necessary check is done befor
 
         inputs:
@@ -537,7 +707,7 @@ end
         @car_id: the id of the car to be taken
     outputs:
             Nothing
-=#
+"""
 function book_trip(pickup_station_id, drop_off_station_id, car_id,
     parking_place_id, start_trip_time, expected_arriving_time)
     # get the car index inside the data frame
@@ -594,19 +764,19 @@ function free_parking_place(parking_place)
     status, pending_reservation, -1# always there is no car
 end
 
-#= a function to set the walking time =#
+"""a function to set the walking time"""
 function set_walking_time(new_walking_time::Int64)
     global maximum_walking_time = new_walking_time
 end
 
-#= function to set the cost factor =#
+"""function to set the cost factor"""
 function set_cost_factor(new_cost_factor::Int64)
     global cost_factor = new_cost_factor
 end
 
 ############################ solution functions ###################################
 
-#= 
+"""
     generate a random solution:
         1- decide how much station to open if it is not precised in @open_stations_number
         2- open random stations 
@@ -615,8 +785,10 @@ end
         @open_stations_number (optional): the number of station to open
     outputs:
         sol:: Solution 
-=#
+"""
 function generate_random_solution(; open_stations_number=-1)
+    @assert length(scenario_list) > 0 "Error: you have the initialize the scenarios first ... "
+   
     sol = Solution()
     potential_locations = get_potential_locations()
     #decide the number of stations to open if it is not precised by the user
@@ -628,35 +800,43 @@ function generate_random_solution(; open_stations_number=-1)
 
     #set initial car number for each station
     for i in eachindex(sol.open_stations_state)
-        max_number_of_charging_points = sol.open_stations_state[i] ? get_prop(manhaten_city_graph, get_potential_locations()[i], :max_number_of_charging_points) : 0
+        max_number_of_charging_points = sol.open_stations_state[i] ? get_prop(manhaten_city_driving_graph, get_potential_locations()[i], :max_number_of_charging_points) : 0
         sol.initial_cars_number[i] = rand(0:max_number_of_charging_points)
     end
 
-    # initialize Randomly the selected paths
-    for sc in scenario_list
-        curr_sc_selected_paths = [rand(Bool) for _ in 1:nrow(sc.feasible_paths)]
-        push!(sol.selected_paths, curr_sc_selected_paths)
-    end
+    # get the selected paths according to the FIFS policy
+    global online_request_serving
+    old_online_serving_value = online_request_serving
+    online_request_serving = true
+    E_carsharing_sim(sol)
+    sol.selected_paths = deepcopy(online_selected_paths)
+    online_request_serving = old_online_serving_value
+    
+    #return the solution
     sol
 end
 
-#=
+"""
     Check whether or not the solution is feasible according to constraints 2, 3, 7 and 8 in Hatice paper
     inputs:
         @sol: the solution
         @all_feasible_paths: the set all feasible paths given by the preprocessing procedure(get_ all_requests_feasible_paths)
     outputs:
         Feasible => Boolean which is true if the solution is feasible, false otherwise.
-=#
+"""
 function is_feasible_solution(sol::Solution)
+    global failed
     #check if the dimention of the solution fields are correctly defined
     if length(get_potential_locations()) != length(sol.open_stations_state) != length(sol.initial_cars_number)
         print_simulation && printstyled(stdout, "the solution fields are not correctly defined\n", color=:light_red)
+        failed = true
+        return false
     end
     #check the initial number of cars (constraint 7 and 8)
     for i in eachindex(sol.open_stations_state)
-        if sol.initial_cars_number[i] > (sol.open_stations_state[i] ? get_prop(manhaten_city_graph, potential_locations[i], :max_number_of_charging_points) : 0)
+        if sol.initial_cars_number[i] > (sol.open_stations_state[i] ? get_prop(manhaten_city_driving_graph, potential_locations[i], :max_number_of_charging_points) : 0)
             print_simulation && println("the initial number of cars in the station ", potential_locations[i], " is greater the the total allowed number (or a stations contains cars despite it is closed")
+            failed = true
             return false
         end
     end
@@ -669,6 +849,7 @@ function is_feasible_solution(sol::Solution)
             # check if the customer is served by  at most one trip (constraint 2)
             if nrow(selected_paths) != length(unique(selected_paths.req))
                 print_simulation && println("there is at least a customer served by more than one trip in scenario $s")
+                failed = true
                 return false
             end
             #check if each station in the selected trips is open (constraint 3)
@@ -681,6 +862,7 @@ function is_feasible_solution(sol::Solution)
                nrow(innerjoin(selected_paths, open_stations_df, on=:destination_station => :station_ids)) != nrow(selected_paths)
 
                 print_simulation && println("there is at least one closed station in the feasible paths")
+                failed = true
                 return false
             end
         end
@@ -695,7 +877,7 @@ function get_stored_solution(sol_id=1)
 end
 
 ################################## heuristics ########################################
-#=
+"""
     this function tries to serve new requests after opening new station for each scenario
     inputs:
         @sol: the solution
@@ -703,52 +885,60 @@ end
     outputs:
         basicaly it return the new seletced paths ad assigne it as well to the onling_selected_paths so we 
         could get it from there as well
-=#
+"""
+
 function serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64,1})
+    # make sure that wer in the right mode
     @assert !online_request_serving && all(x -> x, sol.open_stations_state[stations_idx]) "we are in wrong mode or the station is closed"
+    
+    # declare some global variables
+    global online_request_serving
+    global failed
+    
+    #get the nodes ids for the stations that we recently opened
+    station_nodes_idx = get_potential_locations()[stations_idx]
+    
+    #loop over each scenario and try to serve new requests
     for sc_id in eachindex(scenario_list)
-        sc = scenario_list[sc_id] # handle one scenario a time
+        
+        scenario = scenario_list[sc_id] # handle one scenario a time
+        
+        # get the already served requests 
+        served_requests = scenario.feasible_paths.req[sol.selected_paths[sc_id]]
+        #get the potential trips (where their origins or distination is one of the stations that we recently opened)
+        scenario.feasible_paths.fp_id = collect(1:nrow(scenario.feasible_paths)) 
+        
+        potential_feasible_paths = filter(scenario.feasible_paths) do fp
+            fp.origin_station in station_nodes_idx || fp.destination_station in station_nodes_idx
+        end
+        
+        # keep only the requests that are not served yet
+        filter!(potential_feasible_paths) do fp
+            fp.req ∉ served_requests
+        end
+        
+        #sort the requests according to their revenue
+        sort!(potential_feasible_paths, [:Rev, :req], rev=true)
+        #sort!(potential_feasible_paths, [:start_driving_time], rev=true)
+        
+        new_served_requests = Int64[]
+        for curr_fp in eachrow(potential_feasible_paths)
+            
+            #check if the request is already served
+            if curr_fp.req ∈ new_served_requests
+                continue
+            end
 
-        #get the ids of feasible paths that starts (or ends) from (or to) station_id
-        potential_feasible_path = get_request_feasible_path(stations_idx, sc)
-        #println("list of paths to be examined : $potential_feasible_path")
-        if length(potential_feasible_path) > 0
-            #index over the paths
-            cur_fp_id = 1
-            #the current request id allow as to skip paths if we succefly handle it with a previous path 
-            cur_req_id::Int64 = sc.feasible_paths.req[potential_feasible_path[cur_fp_id]]
-            #println("we are trying to handle request N° $cur_req_id")
-            #iterate over the potential paths
-            while cur_fp_id <= length(potential_feasible_path)
-
-                #check if we are handling a new request
-                if sc.feasible_paths.req[potential_feasible_path[cur_fp_id]] != cur_req_id
-                    cur_req_id = sc.feasible_paths.req[potential_feasible_path[cur_fp_id]]
-                    #println("**************************************************")
-                    #println("we are trying to handle request N° $cur_req_id")
-                end
-
-                sol.selected_paths[sc_id][potential_feasible_path[cur_fp_id]] = true
-                #println("we are trying serve request N° $cur_req_id with path N° $(potential_feasible_path[cur_fp_id])")
-
-                global failed = false
-                E_carsharing_sim(sol, sc_id)
-
-                if !failed
-                    #println("Success!! We could serve request N° $cur_req_id with the path N° $(potential_feasible_path[cur_fp_id])")
-                    #here  the added path is succefuly excuted without any problem 
-                    #se we need to skip all the paths corresponding to the current request
-                    while cur_fp_id <= length(potential_feasible_path) && sc.feasible_paths.req[potential_feasible_path[cur_fp_id]] == cur_req_id
-                        #println("we are skiping the paths for request $cur_req_id")
-                        cur_fp_id += 1
-                    end
-                else
-                    #println("failed!! We could not  serve request N° $cur_req_id with the path N° $(potential_feasible_path[cur_fp_id])")
-                    #here the selected path result a non feasable solution
-                    #se we need to reset the solution
-                    sol.selected_paths[sc_id][potential_feasible_path[cur_fp_id]] = false
-                    cur_fp_id += 1
-                end
+            sol.selected_paths[sc_id][curr_fp.fp_id] = true
+            failed = false
+            E_carsharing_sim(sol, sc_id)
+            if failed
+                #println("failed!! We could not  serve request N° $cur_req_id with the path N° $(potential_feasible_path[cur_fp_id])")
+                #here the selected path result a non feasable solution
+                #se we need to reset the solution
+                sol.selected_paths[sc_id][curr_fp.fp_id] = false
+            else
+                push!(new_served_requests, curr_fp.req)
             end
         end
     end
@@ -758,7 +948,7 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
     E_carsharing_sim(sol)
 end
 
-#=
+"""
     This function retrun the paths where the station, defined by station_id, is origin or destination.
     in addition this function must ensure that the paths are for only requests that not served by another path
     inputs:
@@ -766,13 +956,60 @@ end
         @scenario: the scenario that we want to have feasible paths for it
     outputs:
         Feasible_paths => list of feasible paths 
-=#
-function get_request_feasible_path(stations_idx::Array{Int64,1}, scenario::Scenario)
+"""
+
+function get_request_feasible_path(sol::Solution, stations_idx::Array{Int64,1}, scenario::Scenario)
+    #get the stations nodes ids 
     station_nodes_idx = get_potential_locations()[stations_idx]
-
-    fp_starting_from_req = findall(x -> x in station_nodes_idx, scenario.feasible_paths.origin_station)
-    fp_ending_from_req = findall(x -> x in station_nodes_idx, scenario.feasible_paths.destination_station)
-
-    union(fp_starting_from_req, fp_ending_from_req)
+    
+    #get the paths that are 
+    potential_feasible_paths = filter(scenario.feasible_paths) do fp
+        fp.origin_station in station_nodes_idx || fp.destination_station in station_nodes_idx
+    end
 end
 
+"""
+    This function clean up the solution to serve the requests using only 
+    minimal number of cars
+    it alters the initial number of cars in the solution
+    inputs:
+        @sol: the solution
+    outputs:
+        the new objective function
+"""
+function clean_up_cars_number!(sol::Solution)
+    global used_cars
+    
+    #= df = DataFrame(stations = sol.open_stations_state, cars = sol.initial_cars_number)
+    CSV.write("sol.csv", df) =#
+    # the way that the cars are created are basically when we instantiate the stations
+    new_initial_number_of_cars = Int64[]
+    car_id = 1
+
+    for station_id in eachindex(sol.initial_cars_number) 
+        old_init_car_numbers = car_id:car_id+sol.initial_cars_number[station_id]-1
+        car_id += sol.initial_cars_number[station_id]
+
+        push!(new_initial_number_of_cars, count([x in used_cars for x in old_init_car_numbers]))
+    end
+    
+    sol.initial_cars_number = new_initial_number_of_cars
+    
+    #return the new objective function
+    E_carsharing_sim(sol)
+    
+end
+
+function save_sol(sol::Solution, stations_idx::Array{Int64,1}, path)
+    serialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/$(path)", sol)
+    #write stations_idx to file
+    writedlm("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/stations_idx.txt", stations_idx)
+
+    #read stations_idx from file
+    stations_idx = [1,2]
+end
+
+function load_sol()
+    sol = deserialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/sol.jls")
+    sol
+end
