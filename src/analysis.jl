@@ -2,6 +2,7 @@ using CSV
 using DataFrames
 using StatsPlots
 
+
 """
     plot_best_fitness_tracking(tracking_file_path::String; data_range::range=nothing)
 
@@ -18,7 +19,7 @@ function plot_best_fitness_tracking(tracking_file_path::String; data_range=nothi
    #select the range of data
    data_df = isnothing(data_range) ? data_df : data_df[data_range, :]
    #plot the data
-   @df data_df plot(:Iteration, :BestFitness, xlabel="Iteration", ylabel="Fitness", title="Best Fitness")
+   @df data_df plot!(:Iteration, :BestFitness, xlabel="Iteration", ylabel="Fitness", title="Best Fitness")
    
 end
 
@@ -75,11 +76,10 @@ function get_nbr_improvement(tracking_file_path::String)
 end
 
 tracking_file_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/GIHH_V2.0/results/solve_single_scenario/1/GIHH__HCnt.csv"
-plot_best_fitness_tracking(tracking_file_path#= , data_range = 2:10 =#)
+plot_best_fitness_tracking(tracking_file_path#= , data_range = 1:10 =#)
 
 get_nbr_improvement(tracking_file_path)
 
-performances = read_heuristics_performance(tracking_file_path, save_file_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/results/analysis/heuristics_performance.csv")
+performances = read_heuristics_performance(tracking_file_path#= , save_file_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/results/analysis/heuristics_performance.csv" =#);
 
-sort!(performances, :equal_number, rev = true)
-
+sort!(performances, :improvement_number, rev = true)

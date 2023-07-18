@@ -21,10 +21,14 @@ using Serialization
 using BenchmarkTools
 
 using SparseArrayKit
+using GraphMakie
+using GLMakie
 
 include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
 include("simulation/util.jl")
+
+include("simulation/visualizations.jl")
 
 include("simulation/E_carsharing_sim.jl")
 
@@ -47,5 +51,6 @@ export E_carsharing_sim,
     set_walking_time,
     set_cost_factor,
     project_path,
-    clean_up_cars_number!
+    clean_up_cars_number!,
+    solve_using_mixed_integer_program
 end

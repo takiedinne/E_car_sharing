@@ -44,7 +44,7 @@ global number_of_served_requests = 0 # a couter for the numlber of requests that
         if failed
             break
         end
-
+        
         # waiting until a new request is arrived 
         sleeping_time = req.ST - now(env)
         sleeping_time > 0 && @yield timeout(env, sleeping_time)
@@ -338,23 +338,19 @@ function initialize_sim(sol::Solution, scenario_id::Int64)
         car_id += initial_cars_number
     end
 
-    if !online_request_serving
-        #create a new column in the scenario.requets_list to get the selected path
-        #here we can recheck if the slected paths respecte the constarints (each request is served by only one path)
-        fp = [Int[] for i in eachindex(scenario.request_list.reqId)]
-        for i in eachindex(sol.selected_paths[scenario_id])
-            if sol.selected_paths[scenario_id][i]
-                req = scenario.feasible_paths.req[i]
-                reqId = findfirst(==(req), scenario.request_list.reqId)
-                if length(fp[reqId]) > 0 # so we already put the selected_paths for this request, so we have in feasible sol
-                    failed = false
-                    return #to go out from this current function
-                end
-                fp[reqId] = [i]
-            end
+    # we set the feasible trips Ids in fp column
+    fp = [Int[] for i in eachindex(scenario.request_list.reqId)]
+    if online_request_serving
+        # case 1: we set all feasible paths for each requests so we can take info from it later
+        for i in eachindex(scenario.feasible_paths.req)
+            push!(fp[scenario.feasible_paths.req[i]], i)
         end
-        scenario.request_list.fp = fp
+    else
+        for i in eachindex(scenario.feasible_paths.req)
+            sol.selected_paths[scenario_id][i] && push!(fp[scenario.feasible_paths.req[i]], i)
+        end
     end
+    scenario.request_list.fp = fp
 end
 
 function E_carsharing_sim(sol::Solution, scenario_id::Int64)
@@ -386,10 +382,10 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
 
         total_cars_cost = sum(Array{Float64}([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)]))
 
-        total_station_cost = sum([station.charging_station_base_cost +
+        total_station_cost = sum(Array{Float64}([station.charging_station_base_cost +
                                   station.max_number_of_charging_points * station.charging_point_cost_fast
-                                  for station in stations[sol.open_stations_state]])
-
+                                  for station in stations[sol.open_stations_state]]))
+                                    
         #= total_station_cost = sum(Array{Float64}([station.charging_station_base_cost for station in stations[sol.open_stations_state]])) =#
 
         return revenues - (total_cars_cost + total_station_cost) / cost_factor
@@ -397,6 +393,7 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
 end
 
 function E_carsharing_sim(sol::Solution)
+    #sum(isempty.(scenario_list[1].request_list.fp)) == 1000 && @warn scenario_list[1].request_list.fp
     #save_sol(sol, [11], "sol_sim.jls")
     #check if we did initialize the scenarios
     isempty(scenario_list) &&  @warn "you need to initialize the scenarios !"
@@ -427,3 +424,4 @@ function E_carsharing_sim(sol::Solution)
         return (10^(16 - (number_of_served_requests / sum(nrow(sc.request_list) for sc in scenario_list) * 100 / 10)))
     end
 end
+

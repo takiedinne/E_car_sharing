@@ -1000,16 +1000,11 @@ function clean_up_cars_number!(sol::Solution)
     
 end
 
-function save_sol(sol::Solution, stations_idx::Array{Int64,1}, path)
+function save_sol(sol::Solution, path)
     serialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/$(path)", sol)
-    #write stations_idx to file
-    writedlm("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/stations_idx.txt", stations_idx)
-
-    #read stations_idx from file
-    stations_idx = [1,2]
 end
 
-function load_sol()
-    sol = deserialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/sol.jls")
+function load_sol(path::String)
+    sol = deserialize(path)
     sol
 end

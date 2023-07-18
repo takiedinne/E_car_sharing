@@ -1,43 +1,56 @@
-using GLMakie
-using GraphMakie
-using Colors
+include("../E_car_sharing.jl")
+using Main.E_car_sharing
+
 using Graphs, MetaGraphs
-using DataFrames
+using GLMakie, GraphMakie
 
-small_graph_file = "Data/test_graph.mg"
-small_graph = loadgraph(small_graph_file, MGFormat())
-cols_small = distinguishable_colors(nv(small_graph), [RGB(1, 1, 1), RGB(0, 0, 0)], dropseed=true);
+const e = E_car_sharing
 
-f, ax, p = graphplot(small_graph, edge_width=[3 for i in 1:ne(small_graph)],
-    node_size=[20 for i in 1:nv(small_graph)],
-    node_color=cols_small,
-    nlabels=[string(i+1) for i in 0:nv(small_graph)-1]
-    )
+g = e.manhaten_city_driving_graph
 
-deregister_interaction!(ax, :rectanglezoom)
-
-register_interaction!(ax, :nhover, NodeHoverHighlight(p))
-register_interaction!(ax, :ehover, EdgeHoverHighlight(p))
-register_interaction!(ax, :ndrag, NodeDrag(p))
-
-props(small_graph, Edge(11, 12))
-
-for a in edges(small_graph)
-    println(a)
+# create the graph to be ploted 
+function myLayout(g)
+    x = [get_prop(g, v, :latitude) for v in vertices(g)]
+    y = [get_prop(g, v, :longitude) for v in vertices(g)]
+    return Point2f.(x, y)
 end
 
-#= Manhatten_network_Metagraph_file = "Data/manhatten_graph.mg"
-huge_graph = loadgraph(Manhatten_network_Metagraph_file, MGFormat())
-cols_huge = distinguishable_colors(nv(huge_graph), [RGB(1, 1, 1), RGB(0, 0, 0)], dropseed=true)
+# crate the stations graphs
+stations_graph = MetaGraph()
+locations = e.get_potential_locations() 
+for v in vertices(g)
+    if v in locations
+        add_vertex!(stations_graph, props(g, v))
+    end
+end
 
-f, ax, p = graphplot(huge_graph, edge_width=[3 for i in 1:ne(g)],
-    node_size=[20 for i in 1:nv(g)],
-    node_color=cols,
-    nlabels=[string(i) for i in 0:nv(g)-1])
+#plot it
+nodes_marker = [:rect for _ in 1:nv(stations_graph)]
 
+f, ax, p = graphplot(stations_graph,
+        layout = myLayout(stations_graph), 
+        node_marker = nodes_marker, 
+        node_size = [10 for i in 1:nv(stations_graph)],
+        node_color = [:black for i in 1:nv(stations_graph)],
+        nlabels = ["" for i in 1:nv(stations_graph)]);
+
+#interactions
 deregister_interaction!(ax, :rectanglezoom)
 
-register_interaction!(ax, :nhover, NodeHoverHighlight(p))
-register_interaction!(ax, :ehover, EdgeHoverHighlight(p))
-register_interaction!(ax, :ndrag, NodeDrag(p)) =#
+## node hover functioon
+function node_hover_action(state, idx, event, axis)
+    p.node_size[][idx] = state ? 100 : 10
+    p.node_size[] = p.node_size[] # trigger observable
 
+    p.node_color[][idx] = state ? :red : :black
+    p.node_color[] = p.node_color[]
+
+    p.nlabels[][idx] = state ? "$idx" : ""
+    p.nlabels[] = p.nlabels[]
+    #p.nlabels[][idx] = state ? "station" : ""
+end
+nhover = NodeHoverHandler(node_hover_action)
+register_interaction!(ax, :nhover, nhover)
+
+
+display(GLMakie.Screen(), f)

@@ -61,7 +61,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         mip_file_path = "Data/MIP/programs_file/E_carsharing_mip_$(mip_file_suffix)_$(maximum_walking_time)_walking_time.mof.json"
     end
 
-    if #= !isfile(mip_file_path) =# true
+    if !isfile(mip_file_path) 
         printMIP && @info "[Solving the MIP]: creating the MIP ..."
         create_MIP(scenarios, mip_file_path = mip_file_path)
     end
