@@ -37,6 +37,9 @@ global revenues = 0 #the revenue of serving customers
 global stations = Array{Station,1}() # list of open_stations_state
 global number_of_served_requests = 0 # a couter for the numlber of requests that the simulation served
 
+global current_scenario_id = 1
+global trips_to_unselect = Int64[]
+
 ################################ Online mode ####################################
 @resumable function request_arrival_process_online_mode(env::Environment, scenario::Scenario, sol::Solution)
     #browse all the requests (the requests are sorted according to their arrival time)
@@ -236,6 +239,7 @@ end
     else
         print_simulation && @warn "Customer [$(req.reqId)]: (offline mode) there is no available car at the station "
         global failed = true
+        push!(trips_to_unselect, req.fp[1])
         return
     end
 
@@ -261,6 +265,8 @@ end
         #show the stations vars
         print_simulation && @warn "Customer [$(req.reqId)]: (offline mode) there is no free parking place at station that has id  $drop_off_station_id "
         global failed = true
+        #@info "failed is set to true"
+        push!(trips_to_unselect, req.fp[1])
         return
     end
 
@@ -393,8 +399,7 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
 end
 
 function E_carsharing_sim(sol::Solution)
-    #sum(isempty.(scenario_list[1].request_list.fp)) == 1000 && @warn scenario_list[1].request_list.fp
-    #save_sol(sol, [11], "sol_sim.jls")
+    
     #check if we did initialize the scenarios
     isempty(scenario_list) &&  @warn "you need to initialize the scenarios !"
     
@@ -404,6 +409,7 @@ function E_carsharing_sim(sol::Solution)
     global used_cars = Int64[]
     #check the feasibilty of the solution
     if is_feasible_solution(sol)
+        
         if online_request_serving
             # we have to reset the selected paths inside the solution only for the selected paths
             global online_selected_paths = [Array{Bool,1}(falses(nrow(scenario_list[sc].feasible_paths))) for sc in eachindex(scenario_list)]
@@ -411,6 +417,7 @@ function E_carsharing_sim(sol::Solution)
 
         f_x = 0
         for i in eachindex(scenario_list)
+            global current_scenario_id = i
             f_x_sc = E_carsharing_sim(sol, i)
             if f_x_sc == Inf
                 # penality expersion is as follow: 10^(16 - % of served request/10) so if 

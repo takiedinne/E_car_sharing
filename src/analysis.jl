@@ -75,7 +75,7 @@ function get_nbr_improvement(tracking_file_path::String)
     return counter
 end
 
-tracking_file_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/GIHH_V2.0/results/solve_single_scenario/1/GIHH__HCnt.csv"
+performances_file_path = tracking_file_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/GIHH_V2.0/results/solve_single_scenario/1/GIHH__HCnt.csv"
 plot_best_fitness_tracking(tracking_file_path#= , data_range = 1:10 =#)
 
 get_nbr_improvement(tracking_file_path)
@@ -83,3 +83,4 @@ get_nbr_improvement(tracking_file_path)
 performances = read_heuristics_performance(tracking_file_path#= , save_file_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/results/analysis/heuristics_performance.csv" =#);
 
 sort!(performances, :improvement_number, rev = true)
+

@@ -52,5 +52,6 @@ export E_carsharing_sim,
     set_cost_factor,
     project_path,
     clean_up_cars_number!,
-    solve_using_mixed_integer_program
+    solve_using_mixed_integer_program,
+    clean_up_selected_paths!
 end

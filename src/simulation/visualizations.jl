@@ -78,7 +78,8 @@ function plot_solution(sol::Solution; optimal_sol::Union{Solution, Nothing}=noth
     deregister_interaction!(ax, :nhover)
     function node_hover_action(state, idx, event, axis)
         # get the useful information
-        label = "Capacity = $(get_prop(g, idx, :max_number_of_charging_points))"
+        label = "id = $idx"
+        label = label * "\nCapacity = $(get_prop(g, idx, :max_number_of_charging_points))"
         if sol.open_stations_state[idx] 
             current_number_of_cars = sol.initial_cars_number[idx]
             label = label * "\nsol.cars = $current_number_of_cars"
@@ -103,11 +104,20 @@ function plot_solution(sol::Solution; optimal_sol::Union{Solution, Nothing}=noth
     elem_2 = PolyElement(color = :blue, points = Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
     elem_3 = PolyElement(color = :red, points = Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
     elem_4 = PolyElement(color = :black, points = Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    elem_5 = PolyElement(color = :white, points = Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    elem_6 = PolyElement(color = :white, points = Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    
+    stations_sol = sum(sol.open_stations_state)
+    stations_opt_sol = sum(optimal_sol.open_stations_state)
+    cars_sol = sum(sol.initial_cars_number)
+    cars_opt_sol = sum(optimal_sol.initial_cars_number)
 
    
     Legend(f[1, 2],
-        [elem_1, elem_2, elem_3, elem_4],
-        [ "open in both sols", "open in optimal", "open in sol", "closed in both sols"],
+        [elem_1, elem_2, elem_3, elem_4, elem_5, elem_6],
+        [ "open in both sols", "open in optimal", "open in sol", "closed in both sols",
+         "$stations_sol stations in sol with $cars_sol cars", "$stations_opt_sol stations in optimal with $cars_opt_sol cars"
+         ],
         patchsize = (35, 35), rowgap = 10)
 
    

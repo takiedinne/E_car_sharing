@@ -789,6 +789,8 @@ end
 function generate_random_solution(; open_stations_number=-1)
     @assert length(scenario_list) > 0 "Error: you have the initialize the scenarios first ... "
    
+    global online_request_serving
+
     sol = Solution()
     potential_locations = get_potential_locations()
     #decide the number of stations to open if it is not precised by the user
@@ -805,15 +807,19 @@ function generate_random_solution(; open_stations_number=-1)
     end
 
     # get the selected paths according to the FIFS policy
-    global online_request_serving
     old_online_serving_value = online_request_serving
-    online_request_serving = true
+    
+
+    set_online_mode(true)
     E_carsharing_sim(sol)
     sol.selected_paths = deepcopy(online_selected_paths)
-    online_request_serving = old_online_serving_value
     
+    set_online_mode(old_online_serving_value)
     #return the solution
+    #sol = Solution(Bool[false, false, false, true, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, true, false, false, false, true, false, false, false, true, true, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true], Integer[0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0], Vector{Bool}[[false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]])
+    sol = Solution(Bool[1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [2, 3, 0, 0, 1, 0, 0, 0, 4, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 3, 1, 0, 0, 0, 3, 2, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 3, 2, 3, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 2, 7, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 4, 0, 6, 0, 1, 0, 1, 0, 0], Vector{Bool}[[0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
     sol
+    
 end
 
 """
@@ -873,9 +879,17 @@ function is_feasible_solution(sol::Solution)
 end
 
 function get_stored_solution(sol_id=1)
-    deserialize(project_path("Data/MIP/solutions/solution_$sol_id.jls"))
+    deserialize(project_path("Data/other/GIHH_sol.jls"))
 end
 
+function save_sol(sol::Solution, path)
+    serialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/$(path)", sol)
+end
+
+function load_sol(path::String)
+    sol = deserialize(path)
+    sol
+end
 ################################## heuristics ########################################
 """
     this function tries to serve new requests after opening new station for each scenario
@@ -1000,11 +1014,45 @@ function clean_up_cars_number!(sol::Solution)
     
 end
 
-function save_sol(sol::Solution, path)
-    serialize("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/$(path)", sol)
+"""
+    clean Up the selecte paths after closing (a) station(s).
+    inputs:
+        @sol: the solution
+    outputs:
+        the new objective function
+"""
+
+function clean_up_selected_paths!(sol::Solution)
+    global failed
+    global current_scenario_id
+    global trips_to_unselect
+    #first the trivial case: unselect all the trips that contains a closed station
+    for sc in eachindex(sol.selected_paths)
+        for fp in eachindex(sol.selected_paths[sc])
+            if sol.selected_paths[sc][fp]
+                #get the trip information
+                origin_station_id = findfirst( get_potential_locations() .== scenario_list[sc].feasible_paths.origin_station[fp])
+                destination_station_id = findfirst( get_potential_locations() .== scenario_list[sc].feasible_paths.destination_station[fp])
+
+                if !sol.open_stations_state[origin_station_id] || !sol.open_stations_state[destination_station_id]
+                    sol.selected_paths[sc][fp] = false
+                end
+            end
+        end
+    end
+
+    # second step is to run the simulation and see if everything is okay.
+    # if there still trips that cause infeasible solution we unselect them
+    failed = true
+    fit_value = 10^16
+    set_online_mode(false)
+    while failed
+        trips_to_unselect = Int64[]
+        fit_value = E_carsharing_sim(sol)
+        sol.selected_paths[current_scenario_id][trips_to_unselect] .= false
+    end
+
+    fit_value, sol.selected_paths
 end
 
-function load_sol(path::String)
-    sol = deserialize(path)
-    sol
-end
+
