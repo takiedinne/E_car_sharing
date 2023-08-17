@@ -24,6 +24,8 @@ using SparseArrayKit
 using GraphMakie
 using GLMakie
 
+using StatsPlots
+
 include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
 include("simulation/util.jl")
@@ -35,6 +37,7 @@ include("simulation/E_carsharing_sim.jl")
 include("Mixed_integer_program/Mixed_integer_programme.jl")
 
 include("expriments.jl")
+include("analysis.jl")
 
 
 export E_carsharing_sim,
@@ -53,5 +56,10 @@ export E_carsharing_sim,
     project_path,
     clean_up_cars_number!,
     solve_using_mixed_integer_program,
-    clean_up_selected_paths!
+    clean_up_selected_paths!,
+    serve_requests!,
+    plot_best_fitness_tracking, 
+    get_nbr_improvement, 
+    read_heuristics_performance
+   
 end

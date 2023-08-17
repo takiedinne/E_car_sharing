@@ -348,6 +348,9 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
         # preprossesing procedure
         afp = get_feasible_paths(requests_list, get_potential_locations(), maximum_walking_time)
 
+        # id of each trips
+        afp.fp_id = collect(1:nrow(afp))
+
         # link the feasible paths to their corresponding requests
         feasible_paths_ranges = Array{Array{Int64,1}, 1}()
         i = 1
@@ -816,8 +819,7 @@ function generate_random_solution(; open_stations_number=-1)
     
     set_online_mode(old_online_serving_value)
     #return the solution
-    #sol = Solution(Bool[false, false, false, true, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, true, false, false, false, true, false, false, false, true, true, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true], Integer[0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0], Vector{Bool}[[false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]])
-    sol = Solution(Bool[1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [2, 3, 0, 0, 1, 0, 0, 0, 4, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 3, 1, 0, 0, 0, 3, 2, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 3, 2, 3, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 2, 7, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 4, 0, 6, 0, 1, 0, 1, 0, 0], Vector{Bool}[[0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+    #sol = Solution(Bool[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], Vector{Bool}[[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
     sol
     
 end
@@ -900,8 +902,8 @@ end
         basicaly it return the new seletced paths ad assigne it as well to the onling_selected_paths so we 
         could get it from there as well
 """
-
 function serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64,1})
+    #println("******* serve_requests_after_opening_station *******")
     # make sure that wer in the right mode
     @assert !online_request_serving && all(x -> x, sol.open_stations_state[stations_idx]) "we are in wrong mode or the station is closed"
     
@@ -911,19 +913,19 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
     
     #get the nodes ids for the stations that we recently opened
     station_nodes_idx = get_potential_locations()[stations_idx]
-    
+    sol_stations_nodes_idx = get_potential_locations()[sol.open_stations_state]
+    stations_to_increment_cars = Int64[]
+  
     #loop over each scenario and try to serve new requests
     for sc_id in eachindex(scenario_list)
-        
         scenario = scenario_list[sc_id] # handle one scenario a time
         
         # get the already served requests 
         served_requests = scenario.feasible_paths.req[sol.selected_paths[sc_id]]
-        #get the potential trips (where their origins or distination is one of the stations that we recently opened)
-        scenario.feasible_paths.fp_id = collect(1:nrow(scenario.feasible_paths)) 
         
         potential_feasible_paths = filter(scenario.feasible_paths) do fp
-            fp.origin_station in station_nodes_idx || fp.destination_station in station_nodes_idx
+            (fp.origin_station in station_nodes_idx && fp.destination_station in sol_stations_nodes_idx ) || 
+            (fp.destination_station in station_nodes_idx && fp.origin_station in sol_stations_nodes_idx)
         end
         
         # keep only the requests that are not served yet
@@ -936,30 +938,49 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
         #sort!(potential_feasible_paths, [:start_driving_time], rev=true)
         
         new_served_requests = Int64[]
+       
         for curr_fp in eachrow(potential_feasible_paths)
-            
-            #check if the request is already served
-            if curr_fp.req ∈ new_served_requests
-                continue
-            end
-
+            #curr_fp = potential_feasible_paths[4, :]
             sol.selected_paths[sc_id][curr_fp.fp_id] = true
             failed = false
             E_carsharing_sim(sol, sc_id)
+            
             if failed
-                #println("failed!! We could not  serve request N° $cur_req_id with the path N° $(potential_feasible_path[cur_fp_id])")
-                #here the selected path result a non feasable solution
+                
+                #check if it is drop off trip maybe if we add a car to starting station it can help
+                #if curr_fp.destination_station ∈ station_nodes_idx && curr_fp.origin_station ∉ station_nodes_idx
+                    #increment the number of station cars
+                    
+                    origin_station_id = findfirst( get_potential_locations() .== curr_fp.origin_station)
+                    sol.initial_cars_number[ origin_station_id ] += 1
+                    #try to serve the request again
+                    failed = false
+                    
+                    E_carsharing_sim(sol, sc_id)
+                    if !failed
+                       
+                        push!(new_served_requests, curr_fp.req)
+                        push!(stations_to_increment_cars, origin_station_id)
+                        #@info "serve request after increment number of cars in station $origin_station_id"
+                        continue
+                    else
+                        sol.initial_cars_number[ origin_station_id ] -= 1
+                       
+                    end
+                #end
                 #se we need to reset the solution
                 sol.selected_paths[sc_id][curr_fp.fp_id] = false
+                
             else
+                
                 push!(new_served_requests, curr_fp.req)
             end
         end
     end
-
+    
     #save the solution 
     global online_selected_paths = sol.selected_paths
-    E_carsharing_sim(sol)
+    E_carsharing_sim(sol), stations_to_increment_cars
 end
 
 """
@@ -1021,8 +1042,8 @@ end
     outputs:
         the new objective function
 """
-
 function clean_up_selected_paths!(sol::Solution)
+    #println("************** cleaning up selected paths **************")
     global failed
     global current_scenario_id
     global trips_to_unselect
@@ -1036,11 +1057,11 @@ function clean_up_selected_paths!(sol::Solution)
 
                 if !sol.open_stations_state[origin_station_id] || !sol.open_stations_state[destination_station_id]
                     sol.selected_paths[sc][fp] = false
+                    #@info "unselecting trip $fp in scenario $sc"
                 end
             end
         end
     end
-
     # second step is to run the simulation and see if everything is okay.
     # if there still trips that cause infeasible solution we unselect them
     failed = true
@@ -1055,4 +1076,74 @@ function clean_up_selected_paths!(sol::Solution)
     fit_value, sol.selected_paths
 end
 
+"""
+    serve_requests(sol::Solution, requests_list::Array{Int64, 1})
+    given a list of requests try to serve them using theopened stations in the solution
 
+    inputs:
+        @sol: the solution
+        @requests_list: the list of requests to serve for each scenario
+    outputs:
+        the new objective function
+"""
+function serve_requests!(sol::Solution, requests_list::Vector{Vector{Int64}})
+    #@info "************** serving requests **************"
+    global failed
+
+    opend_stations_node_ids = get_potential_locations()[sol.open_stations_state]
+    stations_to_increment_cars = Int64[]
+     for sc_id in eachindex(requests_list)
+        
+        #loop over the requests
+        for req_id in requests_list[sc_id] 
+            #get the feasible trips for the current request
+            curr_req_feasible_trips_id = findall(x -> scenario_list[sc_id].feasible_paths.req[x] == req_id &&
+                    scenario_list[sc_id].feasible_paths.origin_station[x] in opend_stations_node_ids && 
+                    scenario_list[sc_id].feasible_paths.destination_station[x] in opend_stations_node_ids,
+                    1:nrow(scenario_list[sc_id].feasible_paths))
+
+            for trip_id in curr_req_feasible_trips_id
+                
+                sol.selected_paths[sc_id][trip_id] = true
+                failed = false
+                E_carsharing_sim(sol)
+                
+                if !failed
+                    #@info "request $req_id is served by trip $trip_id"
+                    #here we served the requests so we can break the loop
+                    break
+                else
+                    #here the selected path results a non feasible solution
+                    
+                    #check if we increment the number of cars in the origin station we can serve the request
+                   
+                    origin_station_id = findfirst( get_potential_locations() .== scenario_list[sc_id].feasible_paths.origin_station[trip_id])
+                    #@info "try to increment the cars number in the $origin_station_id of trip $trip_id"
+                    sol.initial_cars_number[origin_station_id ] += 1
+                    #try to serve the request again
+                    failed = false##
+                    E_carsharing_sim(sol, sc_id)
+                    if !failed
+                        push!(stations_to_increment_cars, origin_station_id)
+                        #@info "serve request after increment number of cars in station $origin_station_id"
+                        break
+                    else
+                        sol.initial_cars_number[ origin_station_id ] -= 1
+                        sol.selected_paths[sc_id][trip_id] = false
+                    end
+                    #sol.selected_paths[sc_id][trip_id] = false
+                end
+            end
+        end
+    end
+    #return the new objective function
+    global print_simulation = false
+    #@info "************** End serving requests **************"
+    E_carsharing_sim(sol), sol.selected_paths, stations_to_increment_cars
+end
+
+function get_trips_station(station_id, feasible_trips)
+    station_node_id = get_potential_locations()[station_id]
+    trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id, feasible_trips)
+    trips
+end
