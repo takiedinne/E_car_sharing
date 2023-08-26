@@ -234,7 +234,7 @@ function requests_as_dataframe(scenario_path::String)
     # the scenario file contains only the id of the requests
     scenario_requests_list_df = CSV.read(scenario_path, DataFrame, header=false)
     rename!(scenario_requests_list_df, :Column1 => :reqId)
-    
+    scenario_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/Data/Instances/C1_5000_500/scenario_txt_files/Output_135.txt"
     #perform the join instruction to get all the details of the requests 
     scenario_df = innerjoin(all_request_df, scenario_requests_list_df, on=:reqId)
     # sort the request according to their arriving time
