@@ -186,6 +186,7 @@ function preprocessing_experiment2019()
     end
     CSV.write(results_save_path, results_as_df)
     @info "[preprocessing Exp 2019]: The experiment is finished !"
+    results_as_df
 end
 
 

@@ -294,7 +294,7 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, Î
                         #check the total length
                         driving_duration = get_trip_duration(origin_station_id, destination_station_id, start_driving_time, unit = "seconds")
                         
-                        total_trip_duration = #= walking_time_to_destination_node + walking_time_to_origin_station +  =# driving_duration
+                        total_trip_duration = #= walking_time_to_destination_node + walking_time_to_origin_station + =#  driving_duration
                         print_preprocessing && println("-------->the total trip duration considering start station $origin_station_id and destination station $destination_station_id is $total_trip_duration")
                         # check the total length of the trip constraints
                        
@@ -307,6 +307,7 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, Î
                                 end_driving_slot_id = ceil(Int, driving_duration / 60 / time_slot_length) + start_driving_slot_id
                                 push!(paths, (req.reqId, origin_station_id, destination_station_id, start_driving_slot_id, end_driving_slot_id, req.Rev))
                             else
+                                arriving_time = start_driving_time + driving_duration
                                 push!(paths, (req.reqId, origin_station_id, destination_station_id, start_driving_time, arriving_time, req.Rev))
                             end
                         end
