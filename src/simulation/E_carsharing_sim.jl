@@ -334,7 +334,7 @@ function initialize_sim(sol::Solution, scenario_id::Int64)
     scenario = scenario_list[scenario_id]
     global failed = false
     global stations = Array{Station,1}()
-    
+    global revenues = 0
     #set the stations
     car_id = 1
     for i in 1:length(sol.open_stations_state)
@@ -423,6 +423,7 @@ function E_carsharing_sim(sol::Solution)
                 # penality expersion is as follow: 10^(16 - % of served request/10) so if 
                 return 10^16 * 10^(-1 * (number_of_served_requests / sum(nrow(sc.request_list) for sc in scenario_list) * 100 / 10))
             end
+            
             f_x += f_x_sc
         end
         return -1 * f_x / length(scenario_list)

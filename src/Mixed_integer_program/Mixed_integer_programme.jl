@@ -8,7 +8,7 @@ g = vehicle_specific_values[Smart_ED][:car_cost] # the cost of purchasing the ca
 C_j = [get_prop(manhaten_city_driving_graph, j, :max_number_of_charging_points) for j in J] # the capacity of each station
 T = collect(Int64, 1:300) # set of time slots
 S = collect(1:1) # to redefine
-q_s = [1] # to redefine
+q_s = [] # to redefine
 
 β = vehicle_specific_values[Smart_ED][:battery_capacity] # battery capacity
 # battery usage between the stations. get_trip_duration return percentage so we need to converted again to watt
@@ -39,11 +39,11 @@ function create_solution_for_simulation(sol_df::DataFrame, H::DataFrame)
     sol_L_0 = filter(row -> occursin("L_0", row.x), sol_df)
     
     #selected paths  special traitement
-    #= scenarios = unique(H.scenarioId) 
-
-    selected_paths = [convert.(Bool, round.(sol_u_h.val[findall(x->x == i, H.scenarioId)])  ) for i in scenarios]
-     =#
-    selected_paths = [convert.(Bool, round.(sol_u_h.val)  ) ]
+    scenariosIds = unique(H.scenarioId) 
+    i = 1
+    selected_paths = [convert.(Bool, round.(sol_u_h.val[findall(x->x == i, H.scenarioId)])  ) for i in scenariosIds]
+    
+    #selected_paths = [convert.(Bool, round.(sol_u_h.val)  ) ]
     return Solution(convert.(Bool, round.(sol_y.val)),  convert.(Int, round.(sol_L_0.val)), selected_paths)
 end
 
@@ -61,10 +61,18 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
         mip_file_path = "Data/MIP/programs_file/E_carsharing_mip_$(mip_file_suffix)_$(maximum_walking_time)_walking_time.mof.json"
     end
 
-    if !isfile(mip_file_path) 
+    if !isfile(mip_file_path)  
         printMIP && @info "[Solving the MIP]: creating the MIP ..."
         create_MIP(scenarios, mip_file_path = mip_file_path)
     end
+    # the H variable has to be defined before calling create solution function
+    for i in eachindex(scenarios)
+        scenarios[i].feasible_paths.scenarioId = i .* ones(Int, nrow(scenarios[i].feasible_paths)) 
+    end
+    
+    #Hs = [scenarios[i].feasible_paths  for i in eachindex(scenarios)]# all feasible paths
+    #H = vcat(Hs...)
+    H = vcat([scenarios[i].feasible_paths  for i in eachindex(scenarios)]...)
     
     mip = read_from_file(mip_file_path)
     
@@ -120,36 +128,34 @@ function create_MIP(scenarios::Vector{Scenario}; save_mip_file = true, genarated
        
     # we need H variable in both case so we define it here
     # add column to the different scenarios to store the scenario id
+    last_fp_id = 0
+    sc_fps_range= Array{UnitRange, 1}(undef, length(scenarios))
     for i in eachindex(scenarios)
+        #i = 2
         scenarios[i].request_list.scenarioId = i .* ones(Int, nrow(scenarios[i].request_list)) 
         scenarios[i].feasible_paths.scenarioId = i .* ones(Int, nrow(scenarios[i].feasible_paths)) 
+        for j in 1:nrow(scenarios[i].request_list)
+            scenarios[i].request_list.fp[j] .+= last_fp_id
+        end
+        sc_fps_range[i] = UnitRange(last_fp_id+1, last_fp_id + nrow(scenarios[i].feasible_paths))
+        last_fp_id += nrow(scenarios[i].feasible_paths)
     end
     
     #Hs = [scenarios[i].feasible_paths  for i in eachindex(scenarios)]# all feasible paths
     #H = vcat(Hs...)
     H = vcat([scenarios[i].feasible_paths  for i in eachindex(scenarios)]...)
     
-    # feasible paths range (to avoid filtring at each time)
-    sc_fps_range= Array{UnitRange, 1}(undef, length(scenarios))
-    curent_index = 1
-    for sc in eachindex(scenarios)
-        #get the range of feasible paths for the corresponding scenario
-        sc_fps_range[sc] = UnitRange(curent_index, curent_index + nrow(scenarios[sc].feasible_paths) - 1)
-        curent_index += nrow(scenarios[sc].feasible_paths)
-    end
-        
     printMIP && @info "[Create MIP]: Start ..."
     #set the different variables for the MIP and try to preserve the same names as in the paper
     #K_s = [scenarios[i].request_list for i in eachindex(scenarios)]
     #K = vcat(K_s...) #set of all request in all scenarios
     K = vcat([scenarios[i].request_list for i in eachindex(scenarios)]...)
+    
     #Δ_k = [get_trip_duration(req.ON, req.DN) / time_slot_length * 1.1 for req in eachrow(K)] #time threshold of the trip duration for each request
     
     S = collect(1:length(scenarios)) 
     # at this stage we are not taking in consideration the probability of each scenario
     global q_s = 1 / length(scenarios) .* ones(length(scenarios)) 
-    
-    
     
     #generate the parameters
     b = SparseArray{Int}(undef, nrow(H), length(J), length(T)) 
@@ -191,12 +197,12 @@ function create_MIP(scenarios::Vector{Scenario}; save_mip_file = true, genarated
                 sum(u_h[j] for j in findall((H.req .== K.reqId[i]) 
                 .& 
                 (H.scenarioId .== K.scenarioId[i]))) <= 1) =#
-
-    @constraint(mip, c2[i=1:nrow(K)], sum(u_h[j] for j in (K.fp[i] .+ (1000 * (K.scenarioId[i] - 1 ))) ) <= 1)
-    
+    @constraint(mip, c2[i=1:nrow(K)], sum(u_h[j] for j in K.fp[i]) <= 1)
+   
     #constraints (3)
     @constraint(mip, c33_1[i=1:nrow(H)], u_h[i] <= y[stations_idx[H.origin_station[i]]])
     @constraint(mip, c33_2[i=1:nrow(H)], u_h[i] <= y[stations_idx[H.destination_station[i]]])
+    
     
     #constraint (4)
     printMIP && @info "[Create MIP]: creating constraints 4"
@@ -206,8 +212,7 @@ function create_MIP(scenarios::Vector{Scenario}; save_mip_file = true, genarated
         for s in eachindex(S) 
             for t in eachindex(T)
                 #non zero values of b
-               
-                bnz = [n[1] for n in nonzero_keys(b[sc_fps_range[s], j, t])]
+                bnz = [(sc_fps_range[s][1] + n[1] - 1) for n in nonzero_keys(b[sc_fps_range[s], j, t])]
                 length(bnz) > 0 && @constraint(mip, [[j], [s], [t]], sum(b[h, j, t] * u_h[h] for h in bnz) <= L_ts[j, t, s])
                 #@constraint(mip, [[j], [s], [t]], sum(b[h, j, t] * u_h[h] for h in sc_fps_range[s]) <= L_ts[j, t, s])
 
@@ -225,7 +230,7 @@ function create_MIP(scenarios::Vector{Scenario}; save_mip_file = true, genarated
         for s in eachindex(S)
             for t in eachindex(T)
                 # get the indices of the non zero values of μ - b
-                μbnz = [n[1] for n in union(nonzero_keys(b[sc_fps_range[s], j, t]), nonzero_keys(μ[sc_fps_range[s], j, t]))]
+                μbnz = [(sc_fps_range[s][1] + n[1] -1) for n in union(nonzero_keys(b[sc_fps_range[s], j, t]), nonzero_keys(μ[sc_fps_range[s], j, t]))]
                 length(μbnz) > 0 &&@constraint(mip, [[j], [s], [t]], L_ts[j, t, s] + sum((μ[h, j, t] - b[h, j, t]) * u_h[h]
                             for h in μbnz) <= C_j[j] * y[j])
                                                     
@@ -246,7 +251,7 @@ function create_MIP(scenarios::Vector{Scenario}; save_mip_file = true, genarated
         for t in 2:length(T)
             for s in eachindex(S)
                 # get the indices of the non zero values of μ - b
-                λbnz = [n[1] for n in nonzero_keys(λ[sc_fps_range[s], j, t] - b[sc_fps_range[s], j, t-1])]
+                λbnz = [(n[1] + sc_fps_range[s][1] - 1) for n in nonzero_keys(λ[sc_fps_range[s], j, t] - b[sc_fps_range[s], j, t-1])]
                 @constraint(mip, [[j], [s], [t]], L_ts[j, t, s] == L_ts[j, t-1, s] 
                             +
                             sum((λ[h, j, t] - b[h, j, t-1]) * u_h[h] for h in λbnz))
@@ -338,7 +343,7 @@ function create_MIPs_for_Generated_scenarios()
             global maximum_walking_time = wt
 
             #initialize the scenario
-            scenario = initialize_scenario(file_path)
+            scenario = initialize_scenario(file_path, 1000)
 
             #solve the MIP
             TT = @elapsed create_MIP([scenario], save_mip_file = true, costs_factors_list = costs_factors_list,
@@ -378,7 +383,7 @@ function create_MIPs_for_Ci()
         global maximum_walking_time = wt
         
         #prepare the scenarios
-        scenarios = [initialize_scenario(project_path("Data/Instances/$set/scenario_txt_files/Output1000_$(set)_$(i).txt")) for i in 1:ns]
+        scenarios = [initialize_scenario(project_path("Data/Instances/$set/scenario_txt_files/Output1000_$(set)_$(i).txt"), nr) for i in 1:ns]
         
         # create the MIP and get the time of creation
         TT = @elapsed create_MIP(scenarios, save_mip_file = true, costs_factors_list = costs_factors_list,

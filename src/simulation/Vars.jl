@@ -34,7 +34,16 @@ global Manhatten_network_driving_graph_file = project_path("Data/other/manhatten
 global Manhatten_network_walking_graph_file = project_path("Data/other/manhatten_walking_graph.mg")
 global Manhatten_network_length_graph_file = project_path("Data/other/manhatten_length_graph.mg")
 
-global scenarios_paths = project_path.("Data/Instances/Scenarios_1000_greaterthan2/scenario_txt_files/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Instances/Scenarios_1000_greaterthan2/scenario_txt_files"))))
+function custom_sort(filename)
+    match_result = match(r"Output_(\d+)\.txt", filename)
+    if match_result !== nothing
+        return parse(Int, match_result.captures[1])
+    else
+        return Inf
+    end
+end
+global scenarios_paths = project_path.("Data/Instances/C1_5000_500/scenario_txt_files/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Instances/C1_5000_500/scenario_txt_files"))))
+sort!(scenarios_paths, by=custom_sort)
 
 #general parameters for the simulation:
 global maximum_walking_time = 5 # in min

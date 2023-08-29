@@ -351,6 +351,11 @@ end
          2019, Pages 121-150, ISSN 0191-2615
 """
 function solve_Ci_set_with_MIP()
+    #list of parameters
+    nbr_scenario_list = [10, 50, 100, 200, 499]
+    nbr_requests_list = [1000, 2000, 5000]
+    walking_time_list = [5, #= 6, 7, 8, 9, 10, =# 15]
+    costs_factors = [10^5 #= , 10^6 =#]
     # make sure that we are working with time slot
     global work_with_time_slot
     if !work_with_time_slot
@@ -361,47 +366,46 @@ function solve_Ci_set_with_MIP()
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/solve_ci_sets_with_MIP")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
-
+    !isdir(project_path("Data/MIP/solutions")) && mkpath(project_path("Data/MIP/solutions"))
     #the result file
     results_save_path = string(result_folder_for_this_experiment,"/Ci_sets_MIP_Gurobi_", now(), ".csv")
     
-    # parameters for the experiments
-    scenarios_sets = ["C1", "C2", "C3", "C4"]
-    nbr_scenario_list = [100, 200]
-    nbr_requests_list = [1000]
-    walking_time_list = [5, 6, 7, 8, 9, 10, 15]
-    costs_factors = [10^5, 10^6]
-    
-    results_as_df = DataFrame(Set=String[], NS=Int64[], K=Int64[], β_w=[], PF_Opt=[], J_bar=Int64[], K_bar=Int64[], solver_time=[], total_time =[])
+    # parameters for the experiments    
+    results_as_df = DataFrame(NS=Int64[], K=Int64[], β_w=[], PF_Opt=[], J_bar=Int64[], K_bar=Int64[], solver_time=[], total_time =[], terminal_status = [])
    
-    for (set, ns, nr, wt, cf) in Iterators.product(scenarios_sets, nbr_scenario_list, nbr_requests_list, walking_time_list, costs_factors)
-        @info "[Ci MIP experiment 2019]: set = $set, number of scenarios = $ns, number of requests = $nr, walking time = $wt, cost_factor = $cf"
+    for (ns, nr, wt, cf) in Iterators.product(nbr_scenario_list, nbr_requests_list, walking_time_list, costs_factors)
+        @info "[Ci MIP experiment 2019]: number of scenarios = $ns, number of requests = $nr, walking time = $wt, cost_factor = $cf"
+        ns, nr, wt, cf = 10, 1000, 5, 10^5
         
         #set the  global variables 
         global maximum_walking_time = wt
         global cost_factor = cf
         
+        # Mip file path
+        mip_file_path = project_path("Data/MIP/programs_file/E_carsharing_mip_$(ns)_scenarios_$(nr)_requests_$(wt)_walking_time.mof.json")
+        sol_file_path = project_path("Data/MIP/solutions/E_carsharing_mip_$(ns)_scenarios_$(nr)_requests_$(wt)_walking_time.jls")
+        
         TT = @elapsed begin
             #prepare the scenarios
-            scenarios = [initialize_scenario(project_path("Data/Instances/$set/scenario_txt_files/Output1000_$(set)_$(i).txt")) for i in 1:ns]
+            #@info "inititialize scenarios ..."
+            scenarios = [initialize_scenario(project_path("Data/Instances/C1_5000_500/scenario_txt_files/Output_$(i).txt"), nr) for i in 1:ns]
 
-            # Mip file path
-            mip_file_path = project_path("Data/MIP/programs_file/E_carsharing_mip_$(set)_$(ns)_scenarios_$(nr)_requests_$(wt)_walking_time.mof.json")
-            sol_file_path = project_path("Data/MIP/solutions/E_carsharing_mip_$(set)_$(ns)_scenarios_$(nr)_requests_$(wt)_walking_time.jls")
             # solve using MIP solver 
-            obj, sol, solve_time = solve_using_mixed_integer_program(scenarios, mip_file_path = mip_file_path)
+            #@info "solving the scenarios ..."
+            obj, sol, cpu_time, solver_ter_state = solve_using_mixed_integer_program(scenarios, mip_file_path = mip_file_path)
         end 
         #save the results
         if obj == Inf
-            push!(results_as_df, [set, ns, nr, wt, obj, missing, missing, solve_time, TT])
+            push!(results_as_df, [ns, nr, wt, obj, missing, missing, cpu_time, TT])
         else
-            push!(results_as_df, [cf, nr, wt, obj, sum(sol.open_stations_state), sum([sum(sol.selected_paths[i]) for i in eachindex(scenarios)]), solve_time, TT])
+            push!(results_as_df, [ns, nr, wt, obj, sum(sol.open_stations_state), sum([sum(sol.selected_paths[i]) for i in eachindex(scenarios)]), cpu_time, TT, solver_ter_state])
 
             #save the sol file
             serialize(sol_file_path, sol)
         end
     end
     CSV.write(results_save_path, results_as_df)
+    results_as_df
 end
 
 

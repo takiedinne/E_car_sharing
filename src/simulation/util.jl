@@ -330,8 +330,8 @@ end
     outputs:
         scenario: the object of type scenario
 """
-function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
-    
+function initialize_scenario(scenario_path::String, nbr_requests_per_scenario::Int64, id::Int64 = -1; check_file::Bool=true)
+    global maximum_walking_time
     # Replace "scenario_txt_files" with "scenarios_obj"
     serialized_file = replace(scenario_path, "scenario_txt_files" => "scenarios_objects")
     # Replace ".txt" with ".jls"
@@ -340,7 +340,6 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
     if check_file && isfile(serialized_file)
         sc = deserialize(serialized_file)
         sc.scenario_id = id
-        sc 
     else
        
         # construct the requests lists 
@@ -371,13 +370,17 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
         # save the file
         !isdir(dirname(serialized_file)) && mkpath(dirname(serialized_file))
         serialize(serialized_file, sc)
-        sc
     end
+    #preserve only nbr of requests
+    filter!(row -> row.reqId <= nbr_requests_per_scenario, sc.request_list)
+    filter!(row -> row.req<= nbr_requests_per_scenario, sc.feasible_paths)
+    #return the scenario
+    sc
 end
 
-function initialize_scenarios(scenario_idx::Array{Int64,1})
-    global scenarios_paths
-    global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
+function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_scenario::Int64 = 1000)
+    global scenarios_paths 
+    global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], nbr_requests_per_scenario, i) for i in eachindex(scenario_idx)]
 end
 ########################### Simulation functions ###################################
 """
