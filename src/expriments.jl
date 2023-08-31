@@ -121,74 +121,6 @@ function preprocessing_experiment()
     @info "[preprocessing Exp 2017]: The experiment is finished !"
 end
 
-""" 
-    As the previous experiment, we seek to see the number of accessible requests 
-    as a function of Number of scenarios and maximum walking time.
-    this experiment is the reproduction of the experiment conducted in [2] and results are presented in Fig 2 page 127
-    references:
-    [2]: Hatice çalik, Bernard fortz. Location of Stations in One-Way Electric Car sharing System.
-         IEEE Symposium on Cpmputer and Communications, 2017 Heraklion, Greec. hal-01665609
-"""
-function preprocessing_experiment2019()
-    # Experimenents parameters
-    nbr_scenarios_list =[100, 200, 300, 400, 499]
-    walking_time_list = [5, 6, 7, 8, 9, 10, 15]
-    scenario_size_list = [1000, 2000, 3000, 4000, 5000]
-    
-    global scenarios_paths = project_path.("Data/Instances/C1_5000_500/scenario_txt_files/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Instances/C1_5000_500/scenario_txt_files"))))
-
-    # global variables
-    global all_requests_list 
-    global work_with_time_slot
-    # as we are interested by only the feasibles paths, we don't need to work with time slot
-    if work_with_time_slot
-        work_with_time_slot = false
-        @warn "The working with time slot is set to False"
-    end
-    # the path for the results folder for this experiment (created if doesn't exist)
-    # the name preprocessing_2019 is because this experiment is the reproduction of the experiment on the article of 2019
-    result_folder_for_this_experiment = string(results_folder, "/preprocessing_2019")
-    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
-
-    #the result file
-    results_save_path = project_path(string(result_folder_for_this_experiment,"/preprocessing_results", ".csv"))
-
-    all_station = get_potential_locations()
-    
-    results_as_df = DataFrame(K = Int64[], β_w = Int64[], K_a = Int64[], H = Int64[], PP_time =[])
-    
-    @info "[preprocessing Exp 2019]: start ..."
-    #initialize scenarios to get the requests list
-    scenarios_requests_list = []
-    for i in 1:maximum(nbr_scenarios_list)
-        #= if i == 136 
-            continue
-        end =#
-        requests = requests_as_dataframe(scenarios_paths[i])
-        requests.reqId = requests.reqId .+ (i - 1) * 5000
-        push!(scenarios_requests_list, requests)
-    end
-
-    for (scenario_number, wt, scenario_size) in Iterators.product(nbr_scenarios_list, walking_time_list, scenario_size_list)
-        @info "[preperocessing Exp 2019]: |S| = $scenario_number, wt = $wt, nbr_requests = $scenario_size is being tested ..."
-        
-        curr_requests_list = vcat([scenarios_requests_list[i][1:scenario_size, :] for i in 1:scenario_number]...)
-        
-        #run the preprocessing_function
-        curr_pp_time = @elapsed afp = get_feasible_paths(curr_requests_list, all_station, wt)
-        #results traitement
-        # 1-the accepted requets (|K_a|)
-        curr_k_a =  length(unique(afp.req))
-        # 2- feasible paths size (|H|)
-        curr_H = nrow(afp)
-        # push the results
-        push!(results_as_df, [scenario_number, wt, curr_k_a, curr_H, curr_pp_time])        
-    end
-    CSV.write(results_save_path, results_as_df)
-    @info "[preprocessing Exp 2019]: The experiment is finished !"
-    results_as_df
-end
-
 
 """
 construct the scenarios for the next experiment 
@@ -352,9 +284,9 @@ end
 """
 function solve_Ci_set_with_MIP()
     #list of parameters
-    nbr_scenario_list = [10, 50, 100, 200, 499]
+    nbr_scenario_list = [10, 50, 100, 200, 500]
     nbr_requests_list = [1000, 2000, 5000]
-    walking_time_list = [5, #= 6, 7, 8, 9, 10, =# 15]
+    walking_time_list = [5, #= 6, 7, 8, 9,=# 10,  15]
     costs_factors = [10^5 #= , 10^6 =#]
     # make sure that we are working with time slot
     global work_with_time_slot
@@ -375,10 +307,10 @@ function solve_Ci_set_with_MIP()
    
     for (ns, nr, wt, cf) in Iterators.product(nbr_scenario_list, nbr_requests_list, walking_time_list, costs_factors)
         @info "[Ci MIP experiment 2019]: number of scenarios = $ns, number of requests = $nr, walking time = $wt, cost_factor = $cf"
-        ns, nr, wt, cf = 10, 1000, 5, 10^5
-        
+                
         #set the  global variables 
         global maximum_walking_time = wt
+        global number_of_requests_per_scenario = nr
         global cost_factor = cf
         
         # Mip file path
@@ -414,41 +346,33 @@ end
 """
 function generate_feasible_paths_for_Ci()
     #list of walking times
-    walking_time_list = [5, 6, 7, 8, 9, 10, 15]
+    walking_time_list = [5, #= 6, 7, 8, 9, =# 10, 15]
+    nbr_requests_list = [1000, 2000, 5000]
 
-    #list of sets
-    scenarios_sets = ["C1", "C2", "C3", "C4"]
+    @info "generating feasible paths for the set C1"
+    #scenarios_paths
+    scenarios_paths = project_path.("Data/Instances/C1_5000_500/scenario_txt_files/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Instances/C1_5000_500/scenario_txt_files"))))
 
-    #list of all stations
-    all_station = get_potential_locations()
+    #loop over scenarios_paths
+    for (path, wt, nr) in Iterators.product(scenarios_paths, walking_time_list, nbr_requests_list)
+        
+        #set the maximum walking time
+        global maximum_walking_time = wt
+        global number_of_requests_per_scenario = nr
+        
+        #initialize the scenario (N.P: if it was initilized befor so the function will loadit directly)
+        current_scenario =  initialize_scenario(path)
 
-    #loop over the sets
-    for set in scenarios_sets
-        @info "generating feasible paths for the set $set"
-        #scenarios_paths
-        scenarios_paths = project_path.("Data/Instances/$set/scenario_txt_files/" .* filter!(x -> startswith(x, "Output1000"), readdir(project_path("Data/Instances/$set/scenario_txt_files"))))
+        fps = current_scenario.feasible_paths
+        
+        #save feasible paths the file
+        # Replace "scenario_txt_files" with "feasible_paths"
+        save_fps_path = replace(path, "scenario_txt_files" => "feasible_paths")
+        # Replace ".txt" with ".csv"
+        save_fps_path = replace(save_fps_path, r"\.txt$" => "_$(number_of_requests_per_scenario)_requests_$(maximum_walking_time)_walking_time.csv")
 
-        #loop over scenarios_paths
-        for (path, wt) in Iterators.product(scenarios_paths, walking_time_list)
-            
-            #set the maximum walking time
-            global maximum_walking_time = wt
-            
-            #initialize the scenario (N.P: if it was initilized befor so the function will loadit directly)
-            current_scenario =  initialize_scenario(path)
-
-            fps = current_scenario.feasible_paths
-            
-            #save feasible paths the file
-            # Replace "scenario_txt_files" with "feasible_paths"
-            save_fps_path = replace(path, "scenario_txt_files" => "feasible_paths")
-            # Replace ".txt" with ".csv"
-            save_fps_path = replace(save_fps_path, r"\.txt$" => "_$(maximum_walking_time)_walking_time.csv")
-
-            CSV.write(save_fps_path, fps)
-            
-        end
-    
+        CSV.write(save_fps_path, fps)
+        
     end
     
 end
@@ -512,3 +436,70 @@ function check_the_influence_of_the_defferences_with_hatice_preprocessing()
     CSV.write(results_save_path, results)
 end
 
+
+""" 
+    As the previous experiment, we seek to see the number of accessible requests 
+    as a function of Number of scenarios and maximum walking time.
+    this experiment is the reproduction of the experiment conducted in [2] and results are presented in Fig 2 page 127
+    references:
+    [2]: Hatice çalik, Bernard fortz. Location of Stations in One-Way Electric Car sharing System.
+         IEEE Symposium on Cpmputer and Communications, 2017 Heraklion, Greec. hal-01665609
+"""
+function preprocessing_experiment2019()
+    # Experimenents parameters
+    nbr_scenarios_list =[100, 200, 300, 400, 500]
+    walking_time_list = [5, 6, 7, 8, 9, 10, 15]
+    scenario_size_list = [1000, 2000, 3000, 4000, 5000]
+    
+    global scenarios_paths = project_path.("Data/Instances/C1_5000_500/scenario_txt_files/" .* filter!(x -> startswith(x, "Out"), readdir(project_path("Data/Instances/C1_5000_500/scenario_txt_files"))))
+
+    # global variables
+    global all_requests_list 
+    global work_with_time_slot
+    # as we are interested by only the feasibles paths, we don't need to work with time slot
+    if work_with_time_slot
+        work_with_time_slot = false
+        @warn "The working with time slot is set to False"
+    end
+    # the path for the results folder for this experiment (created if doesn't exist)
+    # the name preprocessing_2019 is because this experiment is the reproduction of the experiment on the article of 2019
+    result_folder_for_this_experiment = string(results_folder, "/preprocessing_2019")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = project_path(string(result_folder_for_this_experiment,"/preprocessing_results", ".csv"))
+
+    all_station = get_potential_locations()
+    
+    results_as_df = DataFrame(S = [], K = Int64[], β_w = Int64[], K_a = Int64[], H = Int64[], PP_time =[])
+    
+    @info "[preprocessing Exp 2019]: start ..."
+    #initialize scenarios to get the requests list
+    scenarios_requests_list = []
+    global number_of_requests_per_scenario = maximum(scenario_size_list)
+    for i in 1:maximum(nbr_scenarios_list)
+        
+        requests = requests_as_dataframe(scenarios_paths[i])
+        requests.reqId = requests.reqId .+ (i - 1) * maximum(scenario_size_list)
+        push!(scenarios_requests_list, requests)
+    end
+    
+    for (scenario_number, wt, scenario_size) in Iterators.product(nbr_scenarios_list, walking_time_list, scenario_size_list)
+        @info "[preperocessing Exp 2019]: |S| = $scenario_number, wt = $wt, nbr_requests = $scenario_size is being tested ..."
+        
+        curr_requests_list = vcat([scenarios_requests_list[i][1:scenario_size, :] for i in 1:scenario_number]...)
+        
+        #run the preprocessing_function
+        curr_pp_time = @elapsed afp = get_feasible_paths(curr_requests_list, all_station, wt)
+        #results traitement
+        # 1-the accepted requets (|K_a|)
+        curr_k_a =  length(unique(afp.req))
+        # 2- feasible paths size (|H|)
+        curr_H = nrow(afp)
+        # push the results
+        push!(results_as_df, [scenario_number, scenario_size, wt, curr_k_a, curr_H, curr_pp_time])        
+    end
+    CSV.write(results_save_path, results_as_df)
+    @info "[preprocessing Exp 2019]: The experiment is finished !"
+    results_as_df
+end

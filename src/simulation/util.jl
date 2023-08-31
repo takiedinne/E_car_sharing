@@ -231,10 +231,14 @@ end
         scenario_df => list of requests with ther details as dataFrame
 """
 function requests_as_dataframe(scenario_path::String)
+    
+    global number_of_requests_per_scenario # this variables indicates how much customers to take 
     # the scenario file contains only the id of the requests
     scenario_requests_list_df = CSV.read(scenario_path, DataFrame, header=false)
     rename!(scenario_requests_list_df, :Column1 => :reqId)
-    scenario_path = "/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/Data/Instances/C1_5000_500/scenario_txt_files/Output_135.txt"
+    
+    # take only number of requests 
+    scenario_requests_list_df = scenario_requests_list_df[1:number_of_requests_per_scenario, :] 
     #perform the join instruction to get all the details of the requests 
     scenario_df = innerjoin(all_request_df, scenario_requests_list_df, on=:reqId)
     # sort the request according to their arriving time
@@ -330,12 +334,13 @@ end
     outputs:
         scenario: the object of type scenario
 """
-function initialize_scenario(scenario_path::String, nbr_requests_per_scenario::Int64, id::Int64 = -1; check_file::Bool=true)
+function initialize_scenario(scenario_path::String, id::Int64 = -1; check_file::Bool=true)
     global maximum_walking_time
+    global number_of_requests_per_scenario
     # Replace "scenario_txt_files" with "scenarios_obj"
     serialized_file = replace(scenario_path, "scenario_txt_files" => "scenarios_objects")
     # Replace ".txt" with ".jls"
-    serialized_file = replace(serialized_file, r"\.txt$" => "_$(maximum_walking_time)_walking_time.jls")
+    serialized_file = replace(serialized_file, r"\.txt$" => "_$(number_of_requests_per_scenario)_requests_$(maximum_walking_time)_walking_time.jls")
 
     if check_file && isfile(serialized_file)
         sc = deserialize(serialized_file)
@@ -371,16 +376,15 @@ function initialize_scenario(scenario_path::String, nbr_requests_per_scenario::I
         !isdir(dirname(serialized_file)) && mkpath(dirname(serialized_file))
         serialize(serialized_file, sc)
     end
-    #preserve only nbr of requests
-    filter!(row -> row.reqId <= nbr_requests_per_scenario, sc.request_list)
-    filter!(row -> row.req<= nbr_requests_per_scenario, sc.feasible_paths)
+    
     #return the scenario
     sc
 end
 
 function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_scenario::Int64 = 1000)
     global scenarios_paths 
-    global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], nbr_requests_per_scenario, i) for i in eachindex(scenario_idx)]
+    global number_of_requests_per_scenario = nbr_requests_per_scenario
+    global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
 end
 ########################### Simulation functions ###################################
 """

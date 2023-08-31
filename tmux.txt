@@ -1,0 +1,9 @@
+tmux new-session -s mysession
+cd src/Tests
+julia test.jl
+
+#detach
+ctrl-b d
+
+#attach
+tmux attach-session -t mysession

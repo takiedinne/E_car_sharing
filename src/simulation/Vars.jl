@@ -47,6 +47,7 @@ sort!(scenarios_paths, by=custom_sort)
 
 #general parameters for the simulation:
 global maximum_walking_time = 5 # in min
+global number_of_requests_per_scenario = 1000
 global walking_speed = 1.34 # m/s
 global time_slot_length = 5 # min
 global fixed_driving_speed =  50 #Km/h
@@ -92,5 +93,9 @@ end
 """
 function set_use_dynamic_speeds(use_dynamic_speed::Bool)
     global use_dynamic_speeds = use_dynamic_speed
+end
+
+function set_number_of_requests_per_scenario(nr::Int64)
+    global number_of_requests_per_scenario = nr
 end
 

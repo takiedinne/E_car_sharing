@@ -383,7 +383,7 @@ function create_MIPs_for_Ci()
         global maximum_walking_time = wt
         
         #prepare the scenarios
-        scenarios = [initialize_scenario(project_path("Data/Instances/$set/scenario_txt_files/Output1000_$(set)_$(i).txt"), nr) for i in 1:ns]
+        scenarios = [initialize_scenario(project_path("Data/Instances/$set/scenario_txt_files/Output1000_$(set)_$(i).txt")) for i in 1:ns]
         
         # create the MIP and get the time of creation
         TT = @elapsed create_MIP(scenarios, save_mip_file = true, costs_factors_list = costs_factors_list,
