@@ -284,10 +284,10 @@ end
 """
 function solve_Ci_set_with_MIP()
     #list of parameters
-    nbr_scenario_list = [10, 50, 100, 200, 500]
-    nbr_requests_list = [1000, 2000, 5000]
-    walking_time_list = [5, #= 6, 7, 8, 9,=# 10,  15]
-    costs_factors = [10^5 #= , 10^6 =#]
+    nbr_scenario_list = [10, 100, 200]
+    nbr_requests_list = [1000, 1000, 5000]
+    walking_time_list = [5, 5, 5]
+    costs_factors = [10^5, 10^5, 10^5]
     # make sure that we are working with time slot
     global work_with_time_slot
     if !work_with_time_slot
@@ -304,8 +304,10 @@ function solve_Ci_set_with_MIP()
     
     # parameters for the experiments    
     results_as_df = DataFrame(NS=Int64[], K=Int64[], β_w=[], PF_Opt=[], J_bar=Int64[], K_bar=Int64[], solver_time=[], total_time =[], terminal_status = [])
-   
-    for (ns, nr, wt, cf) in Iterators.product(nbr_scenario_list, nbr_requests_list, walking_time_list, costs_factors)
+    CSV.write(results_save_path, results_as_df)
+    #for (ns, nr, wt, cf) in Iterators.product(nbr_scenario_list, nbr_requests_list, walking_time_list, costs_factors)
+    for i in eachindex(nbr_scenario_list)
+        ns, nr, wt, cf = nbr_scenario_list[i], nbr_requests_list[i], walking_time_list[i], costs_factors[i]
         @info "[Ci MIP experiment 2019]: number of scenarios = $ns, number of requests = $nr, walking time = $wt, cost_factor = $cf"
                 
         #set the  global variables 
@@ -330,13 +332,15 @@ function solve_Ci_set_with_MIP()
         if obj == Inf
             push!(results_as_df, [ns, nr, wt, obj, missing, missing, cpu_time, TT])
         else
+            empty!(results_as_df)
             push!(results_as_df, [ns, nr, wt, obj, sum(sol.open_stations_state), sum([sum(sol.selected_paths[i]) for i in eachindex(scenarios)]), cpu_time, TT, solver_ter_state])
-
+            
+            CSV.write(results_save_path, results_as_df, append=true)
             #save the sol file
             serialize(sol_file_path, sol)
         end
     end
-    CSV.write(results_save_path, results_as_df)
+    #CSV.write(results_save_path, results_as_df)
     results_as_df
 end
 

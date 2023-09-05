@@ -367,10 +367,10 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
     scenario = scenario_list[scenario_id]
 
     initialize_sim(sol, scenario_id)
-    if failed
+    #= if failed
         print_simulation && @warn "Fatal Error: the solution is not feasible"
         return Inf
-    end
+    end =#
     sim = Simulation()
     if online_request_serving
         @process request_arrival_process_online_mode(sim, scenario, sol)
@@ -385,7 +385,7 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
     else
         # count the objective function
         print_simulation && println("counting the objective function")
-
+        
         total_cars_cost = sum(Array{Float64}([vehicle_specific_values[i][:car_cost] for i in vcat([stations[i].cars.car_type for i in eachindex(stations)]...)]))
 
         total_station_cost = sum(Array{Float64}([station.charging_station_base_cost +

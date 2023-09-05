@@ -74,3 +74,136 @@ function get_nbr_improvement(tracking_file_path::String)
     return counter
 end
 
+"""
+    plot_preprocessing_results()
+    plot the number of feasible trips for each  walking time number 
+    of scenarios and number of requests per scenario
+"""
+function plot_preprocecessing_results()
+    # Load data
+    df = CSV.read("results/preprocessing_2019/preprocessing_results.csv", DataFrame)
+    # the data that we will group on to reshape our data
+    columns_group = [:K, :β_w]
+    data_as_groups = groupby(df, columns_group)
+    #make data as Matrix to plot the groupedbars
+    data_as_Matrix = Array{Int,2}[]
+    for gr in data_as_groups
+        if isempty(data_as_Matrix)
+            data_as_Matrix = gr.H'
+        else
+            data_as_Matrix = vcat(data_as_Matrix, gr.H')
+        end
+    end
+
+
+    keys(data_as_groups)
+    layout = @layout [a b; c d e; f{0.001h}]
+    titles = ["(a): scenarios of 1000 requests",
+        "(b): scenarios of 2000 requests",
+        "(c): scenarios of 3000 requests",
+        "(d): scenarios of 4000 requests",
+        "(e): scenarios of 5000 requests",
+        "The total number of feasible trips genrated"]
+
+    p_objs = []
+    for i in 1:5
+
+        data = data_as_Matrix[((i-1)*7+1):(i*7), :]
+        p = groupedbar(data,
+            title="$(titles[i]): ",
+            bar_width=1.0,
+            bar_position=:dodge, legend=false,
+            ylabel = "Number of feasible trips"
+        )
+        push!(p_objs, p)
+    end
+    #add the title plots
+    push!(p_objs, plot(legend=false, showaxis=false, grid=false, title=titles[6]))
+
+    p = plot(p_objs..., layout=layout, size=(1800, 1200))
+
+end
+
+"""
+    plot_100_500_scenario_results()
+
+"""
+function plot_100_500()
+    #= ***************** the first plot of feasile trips for 1000 requests per scenario =#
+    # Load data
+    df = CSV.read("results/preprocessing_2019/preprocessing_results.csv", DataFrame)
+    # the data that we will group on to reshape our data
+    columns_group = [:K, :β_w]
+    data_as_groups = groupby(df, columns_group)
+    #make data as Matrix to plot the groupedbars
+    data_as_Matrix = Array{Int,2}[]
+    for gr in data_as_groups
+        if isempty(data_as_Matrix)
+            data_as_Matrix = gr.H'
+        else
+            data_as_Matrix = vcat(data_as_Matrix, gr.H')
+        end
+    end
+
+    data_1000_requests_per_sceanrio = data_as_Matrix[1:7, :]
+    p1 = groupedbar(data_1000_requests_per_sceanrio,
+        bar_width=1.0,
+        bar_position=:dodge, label=["100 scenario" "200 scenario" "300 scenario" "400 scenario" "500 scenario"],
+        ylabel="|H|",
+        xlabel="β_w")
+
+    x_custom_tickets = ["5", "6", "7", "8", "9", "10", "15"]
+    xticks!(p1, (1:7, x_custom_tickets))
+    title!("Feasible trips generated for 1000 requests per scenario", titlefont=font(10))
+    #= ********** the second plot for the feasible paths *************** =#
+    data_5000_requests_per_sceanrio = data_as_Matrix[29:35, :]
+    p2 = groupedbar(data_5000_requests_per_sceanrio,
+        bar_width=1.0,
+        bar_position=:dodge, label=["100 scenario" "200 scenario" "300 scenario" "400 scenario" "500 scenario"],
+        ylabel="|H|",
+        xlabel="β_w")
+
+    x_custom_tickets = ["5", "6", "7", "8", "9", "10", "15"]
+    xticks!(p2, (1:7, x_custom_tickets))
+    title!("Feasible trips generated for 5000 requests per scenario", titlefont=font(10))
+    #= ************* plots the number of feasibles requests ************************** =#
+    data_as_Matrix = Array{Int,2}[]
+    for gr in data_as_groups
+        if isempty(data_as_Matrix)
+            data_as_Matrix = gr.K_a'
+        else
+            data_as_Matrix = vcat(data_as_Matrix, gr.K_a')
+        end
+    end
+
+    data_1000_requests_per_sceanrio = data_as_Matrix[1:7, :]
+    p3 = groupedbar(data_1000_requests_per_sceanrio,
+        bar_width=1.0,
+        bar_position=:dodge, label=["100 scenario" "200 scenario" "300 scenario" "400 scenario" "500 scenario"],
+        ylabel="|Kₐ|",
+        xlabel="β_w")
+
+    x_custom_tickets = ["5", "6", "7", "8", "9", "10", "15"]
+    xticks!(p3, (1:7, x_custom_tickets))
+    title!("Feasible requests for 1000 requests per scenario", titlefont=font(10))
+    #= ********** the second plot for the feasible paths *************** =#
+    data_5000_requests_per_sceanrio = data_as_Matrix[29:35, :]
+    p4 = groupedbar(data_5000_requests_per_sceanrio,
+        bar_width=1.0,
+        bar_position=:dodge, label=["100 scenario" "200 scenario" "300 scenario" "400 scenario" "500 scenario"],
+        ylabel="|Kₐ|",
+        xlabel="β_w")
+
+    x_custom_tickets = ["5", "6", "7", "8", "9", "10", "15"]
+    xticks!(p4, (1:7, x_custom_tickets))
+    title!("Feasible requests for 5000 requests per scenario", titlefont=font(10))
+    #save the different plots
+    savefig(p1, "results/preprocessing_2019/feasible_trips_1000_requests_per_scenario.svg")
+    savefig(p2, "results/preprocessing_2019/feasible_trips_5000_requests_per_scenario.svg")
+    savefig(p3, "results/preprocessing_2019/feasible_requests_1000_requests_per_scenario.svg")
+    savefig(p4, "results/preprocessing_2019/feasible_requests_5000_requests_per_scenario.svg")
+end
+
+
+
+ 

@@ -440,9 +440,9 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
             car_index = findall(x -> x >= battery_level_needed, expected_battery_levels)
 
             if !isempty(car_index)
+                
                 # here at least there is a car that meets the consumption constraint
-                selected_car_id = available_car_df[nrow(available_car_df), :].car_id
-
+                selected_car_id = available_car_df.car_id[minimum(car_index)]
                 #= # first we privilege a parked car
                 potential_selected_parked_cars_df = filter(row -> row.status == CAR_PARKED, available_car_df[car_index, :])
                 if !isempty(potential_selected_parked_cars_df)
@@ -468,9 +468,11 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
 
         #get the available places
         available_places_df = filter(row -> row.status == P_FREE ||
-                (!ismissing(row.status_1) && row.status_1 == CAR_RESERVED && row.start_reservation_time <= expected_arrival_time
+                (!ismissing(row.status_1) && row.status_1 == CAR_RESERVED && 
+                row.start_reservation_time <= expected_arrival_time
                  && row.pending_reservation == 0),
             parking_and_cars_df)
+        
 
         if !isempty(available_places_df)
             # here we are sure that there is a place
@@ -492,6 +494,7 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
             break
         end
     end
+    
     return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
 
 end
@@ -723,7 +726,10 @@ function book_trip(pickup_station_id, drop_off_station_id, car_id,
     parking_place_id, start_trip_time, expected_arriving_time)
     # get the car index inside the data frame
     car_indx = findfirst(x -> x == car_id, stations[pickup_station_id].cars.car_id)
-
+    #= if pickup_station_id == 27 
+        @show stations[pickup_station_id].cars
+        @show car_indx
+    end =#
     if car_indx === nothing
         printstyled(stdout, "Error: We can not book the trip the selected car is not parked in the station\n", color=:light_red)
         global failed = true
@@ -762,7 +768,6 @@ function book_trip(pickup_station_id, drop_off_station_id, car_id,
     car.status[1] = CAR_ON_WAY
     car.start_charging_time[1] = NaN
     append!(stations[drop_off_station_id].cars, car)
-    return
 end
 
 function free_parking_place(parking_place)
@@ -810,7 +815,7 @@ function generate_random_solution(; open_stations_number=-1)
     end
     #randomly open stations
     sol.open_stations_state[sample(1:length(potential_locations), open_stations_number, replace=false)] .= true
-
+    
     #set initial car number for each station
     for i in eachindex(sol.open_stations_state)
         max_number_of_charging_points = sol.open_stations_state[i] ? get_prop(manhaten_city_driving_graph, get_potential_locations()[i], :max_number_of_charging_points) : 0
@@ -820,14 +825,12 @@ function generate_random_solution(; open_stations_number=-1)
     # get the selected paths according to the FIFS policy
     old_online_serving_value = online_request_serving
     
-
     set_online_mode(true)
     E_carsharing_sim(sol)
     sol.selected_paths = deepcopy(online_selected_paths)
     
     set_online_mode(old_online_serving_value)
-    #return the solution
-    #sol = Solution(Bool[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], Vector{Bool}[[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+    
     sol
     
 end
@@ -926,6 +929,7 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
   
     #loop over each scenario and try to serve new requests
     for sc_id in eachindex(scenario_list)
+        
         scenario = scenario_list[sc_id] # handle one scenario a time
         
         # get the already served requests 
@@ -948,7 +952,7 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
         new_served_requests = Int64[]
        
         for curr_fp in eachrow(potential_feasible_paths)
-            #curr_fp = potential_feasible_paths[4, :]
+            #curr_fp = potential_feasible_paths[7, :]
             sol.selected_paths[sc_id][curr_fp.fp_id] = true
             failed = false
             E_carsharing_sim(sol, sc_id)
@@ -957,30 +961,29 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
                 
                 #check if it is drop off trip maybe if we add a car to starting station it can help
                 #if curr_fp.destination_station ∈ station_nodes_idx && curr_fp.origin_station ∉ station_nodes_idx
-                    #increment the number of station cars
+                
+                #increment the number of station cars
+                origin_station_id = findfirst( get_potential_locations() .== curr_fp.origin_station)
+                sol.initial_cars_number[ origin_station_id ] += 1
+                #try to serve the request again
+                failed = false
+                
+                #E_carsharing_sim(sol, sc_id)
+                E_carsharing_sim(sol)
+                if !failed
+                    push!(new_served_requests, curr_fp.req)
+                    push!(stations_to_increment_cars, origin_station_id)
+                    #@info "serve request after increment number of cars in station $origin_station_id"
+                    continue
+                else
+                    sol.initial_cars_number[ origin_station_id ] -= 1
                     
-                    origin_station_id = findfirst( get_potential_locations() .== curr_fp.origin_station)
-                    sol.initial_cars_number[ origin_station_id ] += 1
-                    #try to serve the request again
-                    failed = false
-                    
-                    E_carsharing_sim(sol, sc_id)
-                    if !failed
-                       
-                        push!(new_served_requests, curr_fp.req)
-                        push!(stations_to_increment_cars, origin_station_id)
-                        #@info "serve request after increment number of cars in station $origin_station_id"
-                        continue
-                    else
-                        sol.initial_cars_number[ origin_station_id ] -= 1
-                       
-                    end
+                end
                 #end
                 #se we need to reset the solution
                 sol.selected_paths[sc_id][curr_fp.fp_id] = false
                 
             else
-                
                 push!(new_served_requests, curr_fp.req)
             end
         end
