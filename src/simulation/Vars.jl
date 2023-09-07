@@ -73,7 +73,7 @@ global printMIP = false
 global online_request_serving = false # true if we consider the requests by their arrival order
 global penality = 10^16 # if the solution is infeasible so we return this penality
 global work_with_time_slot = true
-global cost_factor = 10^6 # or 10^5
+global cost_factor = 10^5 # or 10^5
 global use_dynamic_speeds = false # to simulate the trafic congestion
 global multiple_driving_speeds = true # take into account the max speed for each edge
 

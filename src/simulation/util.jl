@@ -381,9 +381,12 @@ function initialize_scenario(scenario_path::String, id::Int64 = -1; check_file::
     sc
 end
 
-function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_scenario::Int64 = 1000)
+function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_scenario::Union{Nothing, Int64} = nothing)
     global scenarios_paths 
-    global number_of_requests_per_scenario = nbr_requests_per_scenario
+    global number_of_requests_per_scenario
+    if !isnothing(nbr_requests_per_scenario)
+        number_of_requests_per_scenario = nbr_requests_per_scenario
+    end
     global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
 end
 ########################### Simulation functions ###################################
@@ -422,8 +425,16 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
 
         battery_level_needed = get_battery_level_needed(path) # always 100%
         
-        expected_start_riding_time = path.start_driving_time #= current_time + get_walking_time(req.ON, path.origin_station[1]) =#
-        
+        walking_duration = get_walking_time(req.ON, path.origin_station[1])
+        work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
+
+        expected_start_riding_time = #= path.start_driving_time =# current_time + get_walking_time(req.ON, path.origin_station[1])
+        #= if req.reqId == 99
+            println("expected_start_riding_time = ", expected_start_riding_time)
+            walking_duration = get_walking_time(req.ON, path.origin_station[1])
+            work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
+            @show current_time + walking_duration
+        end =#
         #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
         available_car_df = filter(row -> row.status == CAR_PARKED ||
                 (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_start_riding_time),
