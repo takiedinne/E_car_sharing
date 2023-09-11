@@ -925,8 +925,7 @@ end
         could get it from there as well
 """
 function serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64,1})
-    #println("******* serve_requests_after_opening_station *******")
-    # make sure that wer in the right mode
+   
     @assert !online_request_serving && all(x -> x, sol.open_stations_state[stations_idx]) "we are in wrong mode or the station is closed"
     
     # declare some global variables
@@ -940,7 +939,7 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
   
     #loop over each scenario and try to serve new requests
     for sc_id in eachindex(scenario_list)
-        
+        #sc_id = 113
         scenario = scenario_list[sc_id] # handle one scenario a time
         
         # get the already served requests 
@@ -958,49 +957,94 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
         
         #sort the requests according to their revenue
         sort!(potential_feasible_paths, [:Rev, :req], rev=true)
-        #sort!(potential_feasible_paths, [:start_driving_time], rev=true)
         
         new_served_requests = Int64[]
-       
+        
         for curr_fp in eachrow(potential_feasible_paths)
-            #curr_fp = potential_feasible_paths[7, :]
-            sol.selected_paths[sc_id][curr_fp.fp_id] = true
-            failed = false
-            E_carsharing_sim(sol, sc_id)
             
-            if failed
+            #check if we already served the request
+            curr_fp.req in new_served_requests && continue
+            
+            #check if we can serve the request without trying to serve it
+            sol_feasile_trips = scenario_list[sc_id].feasible_paths[sol.selected_paths[sc_id], :]
+            
+            #general information about the new trip
+            curr_origin_station = curr_fp.origin_station
+            curr_destination_station = curr_fp.destination_station
+           
+            initial_car_origin_station = sol.initial_cars_number[findfirst( get_potential_locations() .== curr_origin_station)]
+            initial_car_destination_station = sol.initial_cars_number[findfirst( get_potential_locations() .== curr_destination_station)]
+            capacity = stations[findfirst(get_potential_locations() .== curr_destination_station)].max_number_of_charging_points
+            
+            #get all the trips involving the origin station and add the new trips and sort them
+            origin_station_trips = filter(row -> row.destination_station == curr_origin_station ||
+                                                row.origin_station == curr_origin_station, sol_feasile_trips)
+            #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
+            origin_station_trips.taking_or_parking_time = [row.origin_station == curr_origin_station ? 
+                            row.start_driving_time : row.arriving_time for row in eachrow(origin_station_trips)]
+            
+            #we add the curr_fp and see if always the cars at this station are >= 0 
+            #(if negative we stop and we can not serve this request)
+            curr_fp_as_df=  DataFrame(curr_fp)
+            curr_fp_as_df.taking_or_parking_time = [curr_fp.start_driving_time]
+            origin_station_trips = vcat(origin_station_trips, curr_fp_as_df)
+            sort!(origin_station_trips, :taking_or_parking_time)
+            
+            cars_at_station = initial_car_origin_station
+            can_serve = true
+            car_arriving_time = zeros(cars_at_station) #keep track when cars are arrived to the station
+            for row in eachrow(origin_station_trips)
                 
-                #check if it is drop off trip maybe if we add a car to starting station it can help
-                #if curr_fp.destination_station ∈ station_nodes_idx && curr_fp.origin_station ∉ station_nodes_idx
-                
-                #increment the number of station cars
-                origin_station_id = findfirst( get_potential_locations() .== curr_fp.origin_station)
-                sol.initial_cars_number[ origin_station_id ] += 1
-                #try to serve the request again
-                failed = false
-                
-                #E_carsharing_sim(sol, sc_id)
-                E_carsharing_sim(sol)
-                if !failed
-                    push!(new_served_requests, curr_fp.req)
-                    push!(stations_to_increment_cars, origin_station_id)
-                    #@info "serve request after increment number of cars in station $origin_station_id"
-                    continue
+                if row.origin_station == curr_origin_station 
+                    cars_at_station -= 1
+                    if cars_at_station < 0
+                        can_serve = false
+                        break
+                    end
+                    start_sharging = pop!(car_arriving_time)
+                    if start_sharging == row.start_driving_time
+                        can_serve = false
+                        break
+                    end
                 else
-                    sol.initial_cars_number[ origin_station_id ] -= 1
-                    
+                    cars_at_station += 1
+                    pushfirst!(car_arriving_time, row.arriving_time)
                 end
-                #end
-                #se we need to reset the solution
-                sol.selected_paths[sc_id][curr_fp.fp_id] = false
-                
-            else
-                push!(new_served_requests, curr_fp.req)
             end
+
+            !can_serve && continue #stop
+            
+            destination_station_trips = filter(row -> row.destination_station == curr_destination_station ||
+                                                row.origin_station == curr_destination_station,
+                                            sol_feasile_trips)
+            #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
+            destination_station_trips.taking_or_parking_time = [row.origin_station == curr_origin_station ? 
+            row.start_driving_time : row.arriving_time for row in eachrow(destination_station_trips)]
+
+            #we add the curr_fp and see if always the free parking spots this station are >= 0 
+            #(if negative we stop and we can not serve this request)
+            curr_fp_as_df.taking_or_parking_time = [curr_fp.arriving_time]
+            destination_station_trips = vcat(destination_station_trips, curr_fp_as_df)
+            sort!(destination_station_trips, :taking_or_parking_time)
+
+            free_spots = capacity - initial_car_destination_station
+
+            for row in eachrow(destination_station_trips)
+                row.origin_station == curr_destination_station ? free_spots += 1 : free_spots -= 1  
+                if free_spots < 0
+                    can_serve = false
+                    break
+                end
+            end
+
+            !can_serve && continue #stop
+            
+            sol.selected_paths[sc_id][curr_fp.fp_id] = true
+            
+            push!(new_served_requests, curr_fp.req)
         end
     end
-    
-    #save the solution 
+     
     global online_selected_paths = sol.selected_paths
     E_carsharing_sim(sol), stations_to_increment_cars
 end
