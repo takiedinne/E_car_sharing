@@ -99,3 +99,5 @@ function set_number_of_requests_per_scenario(nr::Int64)
     global number_of_requests_per_scenario = nr
 end
 
+global seed = 1234
+global rng = MersenneTwister(seed) # random number generator

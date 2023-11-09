@@ -13,6 +13,8 @@ function plot_best_fitness_tracking(tracking_file_path::String; data_range=nothi
 
     #select the range of data
     data_df = isnothing(data_range) ? data_df : data_df[data_range, :]
+    #cleanup the plot 
+    StatsPlots.plot();
     #plot the data
     if !isnothing(optimal_fitness)
         data_df.optimal_fitness .= optimal_fitness
@@ -33,12 +35,14 @@ end
                         (if isnothing it returns the last iteration)
     @save_file_path: the path of the file where the performance will be saved
 """
-function read_heuristics_performance(performances_file_path::String; save_file_path::String = "", iter_num::Int64 = -1)
+function read_heuristics_performance(performances_file_path::String; save_file_path::String = "", iter_num::Int64 = -1, data_range::Union{Nothing, UnitRange} = nothing)
     
     df = CSV.read(performances_file_path, DataFrame, delim = ";")
     
     # get the number of heuristics
     heuristics_number = Int64((size(df, 2) - 4) / 6)
+
+    df = isnothing(data_range) ? df : df[data_range, :]
 
     # iteration number
     iter_num = (iter_num==-1) ? size(df, 1) : iter_num
@@ -204,6 +208,42 @@ function plot_100_500()
     savefig(p4, "results/preprocessing_2019/feasible_requests_5000_requests_per_scenario.svg")
 end
 
+function plot_heuristics_performance(performances_file_path::String;
+                                             iter_num::Int64 = -1,
+                                             data_range::Union{Nothing, UnitRange} = nothing)
+    df = CSV.read(performances_file_path, DataFrame, delim = ";", decimal=',')
+    
+    # get the number of heuristics
+    heuristics_number = Int64((size(df, 2) - 4) / 6)
+    
+    #get the data for the given range if it is set
+    df = isnothing(data_range) ? df : filter(x-> x.Iteration ∈ data_range, df)
+    
+    heuristics_performance_df = DataFrame(id = [], calls_number = [], best_found_number = [], improvement_number = [] , equal_number = [], worse_number = [], cpu_time = [])
+    
+    for i in 1:heuristics_number
+        shift = 4+(i-1)*6
+        curr_heur_data = Vector(df[end, shift:(shift+5)]) - Vector(df[1, shift:(shift+5)]) 
+        push!(heuristics_performance_df,  (i, curr_heur_data...) )
+    end
+    
+    #sort!(heuristics_performance_df, focus_on, rev = true)
 
+    positions = 1:size(heuristics_performance_df, 1)
+    ticks = "LHH-" .* string.(heuristics_performance_df[:, :id] .- 1)
+    @df heuristics_performance_df bar(:improvement_number, label="Improvement solutions found" , legendposition = :topright)
+    @df heuristics_performance_df bar!(:best_found_number, label="new best solutions found")
+    StatsPlots.xticks!((collect(positions), ticks))
+    
+end
 
- 
+"""
+    get_best_fitness()
+    return the fitness value of the best solution found by the solver
+
+"""
+function get_best_fitness(tracking_file_path::String)
+    data_df = CSV.read(tracking_file_path, DataFrame ,delim=';'; #= select = [:Iteration, :BestFitness], =# decimal = ',')
+   
+    return data_df[end, :BestFitness]
+end

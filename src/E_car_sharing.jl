@@ -11,6 +11,7 @@ using EzXML
 
 using Distances
 using StatsBase
+using Distributions
 
 using LinearAlgebra
 using JuMP, Gurobi
@@ -21,10 +22,12 @@ using Serialization
 using BenchmarkTools
 
 using SparseArrayKit
-#= using GraphMakie
-using GLMakie =#
+using GraphMakie
+using GLMakie
 
 using StatsPlots
+using Random
+using Combinatorics
 
 include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
@@ -38,6 +41,8 @@ include("Mixed_integer_program/Mixed_integer_programme.jl")
 
 include("expriments.jl")
 include("analysis.jl")
+
+include("heuristics/heuristics.jl")
 
 
 export E_carsharing_sim,
