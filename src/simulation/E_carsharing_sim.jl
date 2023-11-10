@@ -173,16 +173,19 @@ end
                 global failed = true
                 break
             else
-                @process perform_the_trip_process_offline_mode(env, req, pickup_station_id, drop_off_station_id)
+                selected_car_id, parking_place_id = -1, -1
+                @process perform_the_trip_process_offline_mode(env, req, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
             end
         end
 
     end
 end
 
-@resumable function perform_the_trip_process_offline_mode(env::Environment, req::DataFrameRow, pickup_station_id, drop_off_station_id)
+@resumable function perform_the_trip_process_offline_mode(env::Environment, req::DataFrameRow, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
     global potential_locations #tp get the node id of station
-
+    
+    selected_car_id, parking_place_id = -1, -1
+   
     walking_duration = get_walking_time(req.ON, potential_locations[pickup_station_id])
     work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
 
