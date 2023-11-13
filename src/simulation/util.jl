@@ -473,7 +473,10 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
         end
 
         #check the availability of the parking place (free places + expected to be free places)
-        expected_arrival_time = expected_start_riding_time + get_trip_duration(path.origin_station[1], path.destination_station[1], expected_start_riding_time)
+        trip_duration = get_trip_duration(path.origin_station[1], path.destination_station[1], expected_start_riding_time)
+        work_with_time_slot && trip_duration != Inf && (trip_duration = ceil(Int64, trip_duration / time_slot_length))
+
+        expected_arrival_time = expected_start_riding_time + trip_duration
         # first we group all the information in one Dataframe
         parking_and_cars_df = leftjoin(stations[drop_off_station_id].parking_places, stations[drop_off_station_id].cars, on=:cars => :car_id, makeunique=true)
 

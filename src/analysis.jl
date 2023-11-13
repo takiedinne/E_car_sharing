@@ -247,3 +247,29 @@ function get_best_fitness(tracking_file_path::String)
    
     return data_df[end, :BestFitness]
 end
+
+
+"""
+    plot_depth_cpu_fitness_experiment(file_path::String)
+
+    plot two scatter plots of the fitness and cpu time for each initial_nmber of initial depth of search.
+    the two scatters plots are plotted on the same figure after normalizing the values.
+    The resulted plots allows as to select the best initial depth value
+"""
+function plot_depth_cpu_fitness_experiment(file_path::String)
+    
+    df = CSV.read(file_path, DataFrame)
+    df.mean_fitness .*= -1 
+    a = -1 .* df.cpu_time .+ maximum(df.cpu_time) .+ 1
+
+    #normalize the fitness andc cpu
+    df.y_values = df.mean_fitness ./ maximum(df.mean_fitness) 
+    df.z_values = a ./ maximum(a)
+    df.x_values = string.(df.init_depth, "_", df.iterations)
+
+    #plot line plot
+    scatter(df.x_values, df.y_values, label="Fit")
+    scatter!(df.x_values, df.z_values, xrotation = 90, label= "CPU")
+    xticks!(1:length(df.x_values), df.x_values)
+
+end

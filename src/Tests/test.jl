@@ -21,7 +21,16 @@
 
 using E_car_sharing
 
+
+set_number_of_requests_per_scenario(4000)
+set_walking_time(15)
+
 initialize_scenarios([1])
 sol = generate_random_solution()
+set_online_mode(true)
+using BenchmarkTools
+
+E_carsharing_sim(sol)
+
 set_online_mode(false)
 E_carsharing_sim(sol)
