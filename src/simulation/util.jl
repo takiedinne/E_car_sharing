@@ -324,249 +324,7 @@ function get_feasible_paths(requests_list::DataFrame, stations::Vector{Int64}, �
     paths
 end
 
-"""
-    description: create the scenario object which gather the requests list and their feasible paths
-    inputs:
-        @scenario_path: the path to the file where the request od the scenario are stored
-        @id: the id of the scenario
-        @check_file: if true the function will check if the scenario is already serialized 
-                      and if so it will return the serialized object
-    outputs:
-        scenario: the object of type scenario
-"""
-function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
-    global maximum_walking_time
-    global number_of_requests_per_scenario
-    # Replace "scenario_txt_files" with "scenarios_obj"
-    serialized_file = replace(scenario_path, "scenario_txt_files" => "scenarios_objects")
-    # Replace ".txt" with ".jls"
-    serialized_file = replace(serialized_file, r"\.txt$" => "_$(number_of_requests_per_scenario)_requests_$(maximum_walking_time)_walking_time.jls")
-
-    if check_file && isfile(serialized_file)
-        sc = deserialize(serialized_file)
-        sc.scenario_id = id
-    else
-
-        # construct the requests lists 
-        requests_list = requests_as_dataframe(scenario_path)
-
-        # preprossesing procedure
-        afp = get_feasible_paths(requests_list, get_potential_locations(), maximum_walking_time)
-
-        # id of each trips
-        afp.fp_id = collect(1:nrow(afp))
-
-        # link the feasible paths to their corresponding requests
-        feasible_paths_ranges = Array{Array{Int64,1},1}()
-        i = 1
-        for r in 1:nrow(requests_list)
-            start = nothing
-            last = nothing
-            while i <= nrow(afp) && afp.req[i] == requests_list.reqId[r]
-                isnothing(start) && (start = i)
-                i += 1
-            end
-            last = i - 1
-            isnothing(start) ? push!(feasible_paths_ranges, Int[]) : push!(feasible_paths_ranges, collect(start:last))
-        end
-        requests_list.fp = feasible_paths_ranges
-        sc = Scenario(id, requests_list, afp)
-
-        # save the file
-        !isdir(dirname(serialized_file)) && mkpath(dirname(serialized_file))
-        serialize(serialized_file, sc)
-    end
-
-    #return the scenario
-    sc
-end
-
-function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_scenario::Union{Nothing,Int64}=nothing)
-    global scenarios_paths
-    global number_of_requests_per_scenario
-    if !isnothing(nbr_requests_per_scenario)
-        number_of_requests_per_scenario = nbr_requests_per_scenario
-    end
-    global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
-end
 ########################### Simulation functions ###################################
-"""
-    description: GET ALL THE INFORMATION RELATIVE TO THE REQUEST
-    inputs: 
-        @req => the request to be served
-        @sol => the solution to get the list of the opened stations
-        @current_time => the surrent time
-    output:
-        pickup_station_id => the id of the pickup station 
-        drop_off_station_id => the id the drop off station
-        selected_car_id => the id of the car to be used to perform the trip
-        parking_place_id => the id of the parking place in the drop off station
-"""
-function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, current_time)
-    # vars to return 
-    pickup_station_id = -1
-    drop_off_station_id = -1
-    selected_car_id = -1
-    parking_place_id = -1
-
-    for path_id in req.fp
-        path = scenario.feasible_paths[path_id, :]
-        # reset the vars to be returned
-        selected_car_id = -1 # the id of the car to be used to perform the trip
-        parking_place_id = -1 # the id of the parking place in the drop off station
-        pickup_station_id = findfirst(in(path.origin_station), potential_locations)
-        drop_off_station_id = findfirst(in(path.destination_station), potential_locations)
-
-        #check if the stations are opened
-        if !sol.open_stations_state[pickup_station_id] || !sol.open_stations_state[drop_off_station_id]
-            # at least one of the stations is close
-            continue
-        end
-
-        battery_level_needed = get_battery_level_needed(path) # always 100%
-
-        walking_duration = get_walking_time(req.ON, path.origin_station[1])
-        work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
-
-        expected_start_riding_time = current_time + get_walking_time(req.ON, path.origin_station[1]) #= path.start_driving_time =#
-        #= if req.reqId == 99
-            println("expected_start_riding_time = ", expected_start_riding_time)
-            walking_duration = get_walking_time(req.ON, path.origin_station[1])
-            work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
-            @show current_time + walking_duration
-        end =#
-        #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
-        available_car_df = filter(row -> row.status == CAR_PARKED ||
-                (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_start_riding_time),
-            stations[pickup_station_id].cars)
-        if !isempty(available_car_df)
-
-            # first we count the actual battery levels
-            refrech_battery_levels(pickup_station_id, current_time) # count the actual battery levels
-
-            # second, count the expected battery level at the time of departure of the trip.
-            expected_battery_levels = get_expected_battery_levels(available_car_df, expected_start_riding_time)
-
-            #finaly, get the list of cars that meet the consumption constraint 
-            car_index = findall(x -> x >= battery_level_needed, expected_battery_levels)
-
-            if !isempty(car_index)
-
-                # here at least there is a car that meets the consumption constraint
-                selected_car_id = available_car_df.car_id[minimum(car_index)]
-                #= # first we privilege a parked car
-                potential_selected_parked_cars_df = filter(row -> row.status == CAR_PARKED, available_car_df[car_index, :])
-                if !isempty(potential_selected_parked_cars_df)
-                    # simply we select the first one --> or we can privilege  the car that has the maximum battery level
-                    selected_car_id = potential_selected_parked_cars_df[1, :].car_id
-                else
-                    # or we select a comming car
-                    selected_car_id = available_car_df[1, :].car_id
-                end =#
-            end
-        end
-
-        #check if we could select a car from the pickup station
-        if selected_car_id == -1
-            # the current path could not be used because we didn't find an available car for the trip
-            continue # see the next path
-        end
-
-        #check the availability of the parking place (free places + expected to be free places)
-        trip_duration = get_trip_duration(path.origin_station[1], path.destination_station[1], expected_start_riding_time)
-        work_with_time_slot && trip_duration != Inf && (trip_duration = ceil(Int64, trip_duration / time_slot_length))
-
-        expected_arrival_time = expected_start_riding_time + trip_duration
-        # first we group all the information in one Dataframe
-        parking_and_cars_df = leftjoin(stations[drop_off_station_id].parking_places, stations[drop_off_station_id].cars, on=:cars => :car_id, makeunique=true)
-
-        #get the available places
-        available_places_df = filter(row -> row.status == P_FREE ||
-                (!ismissing(row.status_1) && row.status_1 == CAR_RESERVED &&
-                 row.start_reservation_time <= expected_arrival_time
-                 && row.pending_reservation == 0),
-            parking_and_cars_df)
-
-
-        if !isempty(available_places_df)
-            # here we are sure that there is a place
-            immediately_free_parking_place = filter(row -> row.status == P_FREE, available_places_df)
-            if !isempty(immediately_free_parking_place)
-                # simply we select the first free place
-                parking_place_id = immediately_free_parking_place[1, :].p_id
-            else
-                # or we select any place
-                parking_place_id = available_places_df[1, :].p_id
-            end
-        else
-            #the path can not be used because there is no available place
-            continue
-        end
-        if pickup_station_id != -1 && drop_off_station_id != -1 && selected_car_id != -1 && parking_place_id != -1
-            # we need to memorize the selected requests in the online mode.
-            global online_selected_paths[scenario.scenario_id][path_id] = true
-            break
-        end
-    end
-
-    return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
-
-end
-"""
-    get_walking_time(id_node1, id_node2)
-    returning the walking time between two nodes in minutes
-    it uses the manhatten_city_walking_graph
-
-    if multiple_driving_speeds is true, then the walking time is rounded up to the next integer
-    else the walking time is computed using the walking speed and no rounding is applied
-"""
-function get_walking_time(id_node1, id_node2; unit::String="minutes")
-    @assert unit in ["minutes", "seconds"] "unit must be either minutes or seconds"
-    if id_node1 ∉ keys(shortest_walking_paths)
-        merge!(shortest_walking_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_length_graph, [id_node1])))
-    end
-    conversion_factor = unit == "minutes" ? 60 : 1
-    if shortest_walking_paths[id_node1].dists[id_node2] != Inf
-        walking_time = (multiple_driving_speeds == true) ? ceil(Int, (shortest_walking_paths[id_node1].dists[id_node2] / walking_speed) / conversion_factor) :
-                       (shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / conversion_factor)
-
-        walking_time
-    else
-        Inf
-    end
-end
-
-"""
-    get_trip_duration(id_node1, id_node2, strat_driving_time)
-
-    get the driving time between two nodes in minutes
-    it uses the manhatten_city_driving_graph
-    if global use_dynamic_speed is true then the driving time is computed using the dynamic speed
-    else the driving time is computed using the fixed_driving_speed
-
-    if multiple_driving_speeds is true, then the driving time is rounded up to the next integer
-    else the driving time is computed using the a fixed driving speed and no rounding is applied
-"""
-function get_trip_duration(id_node1, id_node2, strat_driving_time; unit::String="minutes")
-    @assert unit in ["minutes", "seconds"] "unit must be either minutes or seconds"
-    # check if we count the driving time using the MaxSpeed or dynamic speeds
-    if use_dynamic_speeds
-        return get_trip_duration_with_dynamic_speed(id_node1, id_node2, strat_driving_time, unit=unit)
-    end
-    # 
-    if id_node1 ∉ keys(shortest_car_paths)
-        shortest_car_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_driving_graph, [id_node1])
-    end
-    conversion_factor = unit == "minutes" ? 60 : 1
-    if shortest_car_paths[id_node1].dists[id_node2] != Inf
-        driving_duration = (multiple_driving_speeds == true) ? ceil(shortest_car_paths[id_node1].dists[id_node2] / conversion_factor) :
-                           shortest_car_paths[id_node1].dists[id_node2] / fixed_driving_speed / 1000 * conversion_factor
-
-        driving_duration
-    else
-        Inf
-    end
-end
 
 """
     spath(dist, shortest_path_state, src)
@@ -635,41 +393,6 @@ function get_trip_duration_with_dynamic_speed(id_node1::Int64, id_node2::Int64, 
     end
 end
 
-"""
-    description : get the distance between two nodes ( meters)
-"""
-function get_trip_distance(id_node1, id_node2)
-    if id_node1 ∉ keys(shortest_car_paths)
-        merge!(shortest_car_paths, Dict(id_node1 => dijkstra_shortest_paths(manhaten_city_driving_graph, [id_node1])))
-    end
-    distance = shortest_car_paths[id_node1].dists[id_node2]
-    distance
-end
-"""
-    get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
-
-get the battery consumtion of the trip between two nodes
-
-    @inputs:
-        id_node1::Int64 : the id of the origin node
-        id_node2::Int64 : the id of the distination node
-        Tcar::car_type : the type of the car
-
-    @outputs:
-        percentage_energy_consumption::Float64 : the percentage of the battery that will be consumed
-"""
-function get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
-    α = vehicle_specific_values[Tcar][:α]
-    β = vehicle_specific_values[Tcar][:β]
-    γ = vehicle_specific_values[Tcar][:γ]
-    vij = fixed_driving_speed * 1000 / 3600
-    battery_capacity = vehicle_specific_values[Tcar][:battery_capacity]
-
-    distance = get_trip_distance(id_node1, id_node2)
-    percentage_energy_consumption = distance * (α + β * vij^2 + γ / vij) / battery_capacity * 100
-
-    percentage_energy_consumption
-end
 
 function get_potential_locations()
     global potential_locations
@@ -709,8 +432,8 @@ end
 """
     this function recounts the battery level of the cars in the station 
 """
-function refrech_battery_levels(station_id::Int64, current_time)
-    for car in eachrow(stations[station_id].cars)
+function refrech_battery_levels!(cars::DataFrame, current_time)
+    for car in eachrow(cars)
 
         if car.status in [CAR_PARKED, CAR_RESERVED] && car.last_battery_level < 100  # in both these cases the cars is supposed to be plugged-in the charger spot
             charging_time = (current_time - car.start_charging_time) * 60 * (work_with_time_slot ? time_slot_length : 1)
@@ -726,74 +449,6 @@ function refrech_battery_levels(station_id::Int64, current_time)
     end
 end
 
-"""
-    in this function we don't do any check about the paramaters. the necessary check is done befor
-
-        inputs:
-        @pickup_station_id: the station where the car to pick up is parked
-        @drop_off_station_id: the station where the car will be parked after performing the trip
-        @car_id: the id of the car to be taken
-    outputs:
-            Nothing
-"""
-function book_trip(pickup_station_id, drop_off_station_id, car_id,
-    parking_place_id, start_trip_time, expected_arriving_time)
-    # get the car index inside the data frame
-    car_indx = findfirst(x -> x == car_id, stations[pickup_station_id].cars.car_id)
-    #= if pickup_station_id == 27 
-        @show stations[pickup_station_id].cars
-        @show car_indx
-    end =#
-    if car_indx === nothing
-        printstyled(stdout, "Error: We can not book the trip the selected car is not parked in the station\n", color=:light_red)
-        global failed = true
-        return
-    end
-
-    #  reserve the car
-    if stations[pickup_station_id].cars.status[car_indx] == CAR_RESERVED
-        printstyled(stdout, "Error: We can not book the trip the selected car is already reserved\n", color=:light_red)
-        global failed = true
-        return
-    end
-
-    if stations[pickup_station_id].cars.status[car_indx] == CAR_PARKED
-        stations[pickup_station_id].cars.status[car_indx] = CAR_RESERVED
-    else # CAR_ON_WAY
-        #just we increment the pending reservation 
-        stations[pickup_station_id].cars.pending_reservation[car_indx] += 1
-    end
-    stations[pickup_station_id].cars.start_reservation_time[car_indx] = start_trip_time
-
-    #decrease the battery level
-    stations[pickup_station_id].cars.last_battery_level[car_indx] -= get_trip_battery_consumption(potential_locations[pickup_station_id], potential_locations[drop_off_station_id], stations[pickup_station_id].cars.car_type[car_indx])
-
-    # reserve the parking space
-    #check if the parking place is occupied or resereved ( it will be free by the arriving time)
-    if stations[drop_off_station_id].parking_places[parking_place_id, :].status in [P_OCCUPIED, P_RESERVED]
-        stations[drop_off_station_id].parking_places.pending_reservation[parking_place_id] += 1
-    else
-        # the place is free so we reserved it directely
-        stations[drop_off_station_id].parking_places.status[parking_place_id] = P_RESERVED
-    end
-    # change the status of the car and precise to the drop off station that it is in its way comming 
-    car = DataFrame(stations[pickup_station_id].cars[car_indx, :]) # copy
-    car.expected_arrival_time[1] = expected_arriving_time
-    car.status[1] = CAR_ON_WAY
-    car.start_charging_time[1] = NaN
-    append!(stations[drop_off_station_id].cars, car)
-end
-
-function free_parking_place(parking_place)
-    if parking_place[:pending_reservation] > 0
-        pending_reservation = parking_place[:pending_reservation] - 1
-        status = P_RESERVED
-    else
-        status, pending_reservation = P_FREE, 0
-    end
-    status, pending_reservation, -1# always there is no car
-end
-
 """a function to set the walking time"""
 function set_walking_time(new_walking_time::Int64)
     global maximum_walking_time = new_walking_time
@@ -804,115 +459,103 @@ function set_cost_factor(new_cost_factor::Int64)
     global cost_factor = new_cost_factor
 end
 
+
+"""
+    get_walking_time(id_node1, id_node2)
+    returning the walking time between two nodes in minutes
+    it uses the manhatten_city_walking_graph
+
+    if multiple_driving_speeds is true, then the walking time is rounded up to the next integer
+    else the walking time is computed using the walking speed and no rounding is applied
+"""
+function get_walking_time(id_node1, id_node2; unit::String="minutes")
+    @assert unit in ["minutes", "seconds"] "unit must be either minutes or seconds"
+    if id_node1 ∉ keys(shortest_walking_paths)
+        Threads.lock(shortest_walking_paths_lock)
+        try
+            shortest_walking_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_length_graph, [id_node1])
+        finally
+            Threads.unlock(shortest_walking_paths_lock)
+        end
+    end
+
+    conversion_factor = unit == "minutes" ? 60 : 1
+    
+    if shortest_walking_paths[id_node1].dists[id_node2] != Inf
+        walking_time = (multiple_driving_speeds == true) ? ceil(Int, (shortest_walking_paths[id_node1].dists[id_node2] / walking_speed) / conversion_factor) :
+                       (shortest_walking_paths[id_node1].dists[id_node2] / walking_speed / conversion_factor)
+
+        walking_time
+    else
+        Inf
+    end
+end
+
+"""
+    get_trip_duration(id_node1, id_node2, strat_driving_time)
+
+    get the driving time between two nodes in minutes
+    it uses the manhatten_city_driving_graph
+    if global use_dynamic_speed is true then the driving time is computed using the dynamic speed
+    else the driving time is computed using the fixed_driving_speed
+
+    if multiple_driving_speeds is true, then the driving time is rounded up to the next integer
+    else the driving time is computed using the a fixed driving speed and no rounding is applied
+"""
+function get_trip_duration(id_node1, id_node2, strat_driving_time; unit::String="minutes")
+    @assert unit in ["minutes", "seconds"] "unit must be either minutes or seconds"
+    # check if we count the driving time using the MaxSpeed or dynamic speeds
+    if use_dynamic_speeds
+        return get_trip_duration_with_dynamic_speed(id_node1, id_node2, strat_driving_time, unit=unit)
+    end
+    # 
+    if id_node1 ∉ keys(shortest_car_paths)
+        Threads.lock(shortest_car_paths_lock)
+        try
+            shortest_car_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_driving_graph, [id_node1])
+        finally
+            Threads.unlock(shortest_car_paths_lock)
+        end
+    end
+    conversion_factor = unit == "minutes" ? 60 : 1
+    if shortest_car_paths[id_node1].dists[id_node2] != Inf
+        driving_duration = (multiple_driving_speeds == true) ? ceil(shortest_car_paths[id_node1].dists[id_node2] / conversion_factor) :
+                           shortest_car_paths[id_node1].dists[id_node2] / fixed_driving_speed / 1000 * conversion_factor
+
+        driving_duration
+    else
+        Inf
+    end
+end
+
+
+function get_trip_distance(id_node1, id_node2)
+    if id_node1 ∉ keys(shortest_car_paths)
+        Threads.lock(shortest_car_paths_lock)
+        try
+            shortest_car_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_driving_graph, [id_node1])
+        finally
+            Threads.unlock(shortest_car_paths_lock)
+        end
+    end
+    distance = shortest_car_paths[id_node1].dists[id_node2]
+    distance
+end
+
+function get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
+    α = vehicle_specific_values[Tcar][:α]
+    β = vehicle_specific_values[Tcar][:β]
+    γ = vehicle_specific_values[Tcar][:γ]
+    vij = fixed_driving_speed * 1000 / 3600
+    battery_capacity = vehicle_specific_values[Tcar][:battery_capacity]
+
+    distance = get_trip_distance(id_node1, id_node2)
+    percentage_energy_consumption = distance * (α + β * vij^2 + γ / vij) / battery_capacity * 100
+
+    percentage_energy_consumption
+end
+
 ############################ solution functions ###################################
-
-"""
-    generate a random solution:
-        1- decide how much station to open if it is not precised in @open_stations_number
-        2- open random stations 
-        3- set random initial number of cars for each station
-    inputs:
-        @open_stations_number (optional): the number of station to open
-    outputs:
-        sol:: Solution 
-"""
-function generate_random_solution(; open_stations_number=-1)
-    @assert length(scenario_list) > 0 "Error: you have the initialize the scenarios first ... "
-
-    global online_request_serving
-    global rng
-
-    sol = Solution()
-    potential_locations = get_potential_locations()
-    #decide the number of stations to open if it is not precised by the user
-    if open_stations_number == -1
-        mean_value = 43  # (1+85)/2 = 43
-        std_deviation = 10  # Adjust this value to control the spread of the distribution
-
-        # Create a truncated normal distribution between 1 and 85
-        truncated_dist = Truncated(Distributions.Normal(mean_value, std_deviation), 1, 85)
-
-        # Generate a random integer from the truncated distribution
-        open_stations_number = round(Int64, rand(rng, truncated_dist))
-    end
-    #randomly open stations
-    sol.open_stations_state[sample(rng, 1:length(potential_locations), open_stations_number, replace=false)] .= true
-
-    #set initial car number for each station
-    for i in eachindex(sol.open_stations_state)
-        max_number_of_charging_points = sol.open_stations_state[i] ? get_prop(manhaten_city_driving_graph, get_potential_locations()[i], :max_number_of_charging_points) : 0
-        sol.initial_cars_number[i] = rand(rng, 0:max_number_of_charging_points)
-    end
-
-    # get the selected paths according to the FIFS policy
-    old_online_serving_value = online_request_serving
-
-    set_online_mode(true)
-    E_carsharing_sim(sol)
-    sol.selected_paths = deepcopy(online_selected_paths)
-
-    set_online_mode(old_online_serving_value)
-    #sol = load_sol("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/Data/other/GIHH_sol.jls")
-    sol
-
-end
-
-"""
-    Check whether or not the solution is feasible according to constraints 2, 3, 7 and 8 in Hatice paper
-    inputs:
-        @sol: the solution
-        @all_feasible_paths: the set all feasible paths given by the preprocessing procedure(get_ all_requests_feasible_paths)
-    outputs:
-        Feasible => Boolean which is true if the solution is feasible, false otherwise.
-"""
-function is_feasible_solution(sol::Solution)
-    global failed
-    #check if the dimention of the solution fields are correctly defined
-    if length(get_potential_locations()) != length(sol.open_stations_state) != length(sol.initial_cars_number)
-        print_simulation && printstyled(stdout, "the solution fields are not correctly defined\n", color=:light_red)
-        failed = true
-        return false
-    end
-    #check the initial number of cars (constraint 7 and 8)
-    for i in eachindex(sol.open_stations_state)
-        if sol.initial_cars_number[i] > (sol.open_stations_state[i] ? get_prop(manhaten_city_driving_graph, potential_locations[i], :max_number_of_charging_points) : 0)
-            print_simulation && println("the initial number of cars in the station ", potential_locations[i], " is greater the the total allowed number (or a stations contains cars despite it is closed")
-            failed = true
-            return false
-        end
-    end
-
-    if !online_request_serving
-        global scenario_list
-        for s in eachindex(sol.selected_paths)
-            selected_paths = scenario_list[s].feasible_paths[sol.selected_paths[s], :]
-
-            # check if the customer is served by  at most one trip (constraint 2)
-            if nrow(selected_paths) != length(unique(selected_paths.req))
-                print_simulation && println("there is at least a customer served by more than one trip in scenario $s")
-                failed = true
-                return false
-            end
-            #check if each station in the selected trips is open (constraint 3)
-
-            #get the oponed stations as dataframes (the number of node in the graph)
-            open_stations_df = DataFrame(station_ids=get_potential_locations()[sol.open_stations_state]) # usuful for innerjoin
-
-            #i used inner join to take select the opened stations used in the selected paths and then compared with the number of stations used
-            if nrow(innerjoin(selected_paths, open_stations_df, on=:origin_station => :station_ids)) != nrow(selected_paths) ||
-               nrow(innerjoin(selected_paths, open_stations_df, on=:destination_station => :station_ids)) != nrow(selected_paths)
-
-                print_simulation && println("there is at least one closed station in the feasible paths")
-                failed = true
-                return false
-            end
-        end
-        # constraint 4, 5 and 6  are to be checked in the simulation
-    end
-
-    return true
-end
-
 function get_stored_solution(sol_id=1)
     deserialize(project_path("Data/other/GIHH_sol.jls"))
 end
@@ -924,374 +567,4 @@ end
 function load_sol(path::String)
     sol = deserialize(path)
     sol
-end
-################################## heuristics ########################################
-"""
-    this function tries to serve new requests after opening new station for each scenario
-    inputs:
-        @sol: the solution
-        @station_id: the id of the station that we recently oponed
-    outputs:
-        basicaly it return the new seletced paths ad assigne it as well to the onling_selected_paths so we 
-        could get it from there as well
-"""
-function serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64,1})
-    #@info "*********** serve_requests_after_opening_station ***************"
-    #= @show stations_idx =#
-    @assert !online_request_serving && all(x -> x, sol.open_stations_state[stations_idx]) "we are in wrong mode or the station is closed"
-    
-    # declare some global variables
-    global online_request_serving
-    global failed
-
-    #get the nodes ids for the stations that we recently opened
-    station_nodes_idx = get_potential_locations()[stations_idx]
-    sol_stations_nodes_idx = get_potential_locations()[sol.open_stations_state]
-    stations_to_increment_cars = Int64[]
-
-    #loop over each scenario and try to serve new requests
-    for sc_id in eachindex(scenario_list)
-        #sc_id = 1
-        scenario = scenario_list[sc_id] # handle one scenario a time
-
-        # get the already served requests 
-        served_requests = scenario.feasible_paths.req[sol.selected_paths[sc_id]]
-
-        potential_feasible_paths = filter(scenario.feasible_paths) do fp
-            (fp.origin_station in station_nodes_idx && fp.destination_station in sol_stations_nodes_idx) ||
-                (fp.destination_station in station_nodes_idx && fp.origin_station in sol_stations_nodes_idx)
-        end
-
-        # keep only the requests that are not served yet
-        filter!(potential_feasible_paths) do fp
-            fp.req ∉ served_requests
-        end
-
-        #sort the requests according to their revenue
-        sort!(potential_feasible_paths, [:Rev, :req], rev=true)
-
-        new_served_requests = Int64[]
-
-        for curr_fp in eachrow(potential_feasible_paths)
-            #curr_fp = potential_feasible_paths[2, :]
-            #check if we already served the request
-            curr_fp.req in new_served_requests && continue
-            
-            #check if we can serve the request without trying to serve it
-            can_serve, can_serve_if_increment_cars = can_use_trip(sc_id, curr_fp, sol)
-            if can_serve
-                sol.selected_paths[sc_id][curr_fp.fp_id] = true
-                push!(new_served_requests, curr_fp.req)
-            end
-            if can_serve_if_increment_cars
-                station_id = findfirst(x -> x == curr_fp.origin_station, get_potential_locations())
-                sol.initial_cars_number[station_id] += 1
-                push!(stations_to_increment_cars, station_id)
-            end
-        end
-    end
-
-    global online_selected_paths = sol.selected_paths
-    #@info "*********** end of serve_requests_after_opening_station ***************"
-    E_carsharing_sim(sol), stations_to_increment_cars
-end
-
-"""
-    This function retrun the paths where the station, defined by station_id, is origin or destination.
-    in addition this function must ensure that the paths are for only requests that not served by another path
-    inputs:
-        @sol: the solution
-        @scenario: the scenario that we want to have feasible paths for it
-    outputs:
-        Feasible_paths => list of feasible paths 
-"""
-
-function get_request_feasible_path(sol::Solution, stations_idx::Array{Int64,1}, scenario::Scenario)
-    #get the stations nodes ids 
-    station_nodes_idx = get_potential_locations()[stations_idx]
-
-    #get the paths that are 
-    potential_feasible_paths = filter(scenario.feasible_paths) do fp
-        fp.origin_station in station_nodes_idx || fp.destination_station in station_nodes_idx
-    end
-end
-
-"""
-    This function clean up the solution to serve the requests using only 
-    minimal number of cars
-    it alters the initial number of cars in the solution
-    inputs:
-        @sol: the solution
-    outputs:
-        the new objective function
-"""
-function clean_up_cars_number!(sol::Solution)
-    global used_cars
-
-    #= df = DataFrame(stations = sol.open_stations_state, cars = sol.initial_cars_number)
-    CSV.write("sol.csv", df) =#
-    # the way that the cars are created are basically when we instantiate the stations
-    E_carsharing_sim(sol)
-    new_initial_number_of_cars = Int64[]
-    car_id = 1
-
-    for station_id in eachindex(sol.initial_cars_number)
-        old_init_car_numbers = car_id:car_id+sol.initial_cars_number[station_id]-1
-        car_id += sol.initial_cars_number[station_id]
-
-        push!(new_initial_number_of_cars, count([x in used_cars for x in old_init_car_numbers]))
-    end
-
-    sol.initial_cars_number = new_initial_number_of_cars
-
-    #return the new objective function
-    E_carsharing_sim(sol)
-
-end
-
-"""
-    clean Up the selecte paths after closing (a) station(s).
-    inputs:
-        @sol: the solution
-    outputs:
-        the new objective function
-"""
-function clean_up_selected_paths!(sol::Solution)
-    #println("************** cleaning up selected paths **************")
-    global failed
-    global current_scenario_id
-    global trips_to_unselect
-    #first the trivial case: unselect all the trips that contains a closed station
-    for sc in eachindex(sol.selected_paths)
-        for fp in eachindex(sol.selected_paths[sc])
-            if sol.selected_paths[sc][fp]
-                #get the trip information
-                origin_station_id = findfirst(get_potential_locations() .== scenario_list[sc].feasible_paths.origin_station[fp])
-                destination_station_id = findfirst(get_potential_locations() .== scenario_list[sc].feasible_paths.destination_station[fp])
-
-                if !sol.open_stations_state[origin_station_id] || !sol.open_stations_state[destination_station_id]
-                    sol.selected_paths[sc][fp] = false
-                    #@info "unselecting trip $fp in scenario $sc"
-                end
-            end
-        end
-    end
-    # second step is to run the simulation and see if everything is okay.
-    # if there still trips that cause infeasible solution we unselect them
-    failed = true
-    fit_value = 10^16
-    set_online_mode(false)
-    while failed
-        trips_to_unselect = Int64[]
-        fit_value = E_carsharing_sim(sol)
-        sol.selected_paths[current_scenario_id][trips_to_unselect] .= false
-    end
-
-    fit_value, sol.selected_paths
-end
-
-"""
-    serve_requests(sol::Solution, requests_list::Array{Int64, 1})
-    given a list of requests try to serve them using theopened stations in the solution
-
-    inputs:
-        @sol: the solution
-        @requests_list: the list of requests to serve for each scenario
-    outputs:
-        the new objective function
-"""
-function serve_requests!(sol::Solution, requests_list::Vector{Vector{Int64}})
-    #@info "************** serving requests **************"
-    global failed
-
-    opend_stations_node_ids = get_potential_locations()[sol.open_stations_state]
-    stations_to_increment_cars = Int64[]
-    for sc_id in eachindex(requests_list)
-        #loop over the requests
-        for req_id in requests_list[sc_id]
-            #get the feasible trips for the current request
-            curr_req_feasible_trips_id = findall(x -> scenario_list[sc_id].feasible_paths.req[x] == req_id &&
-                                                    scenario_list[sc_id].feasible_paths.origin_station[x] in opend_stations_node_ids &&
-                                                    scenario_list[sc_id].feasible_paths.destination_station[x] in opend_stations_node_ids,
-                1:nrow(scenario_list[sc_id].feasible_paths))
-
-            for trip_id in curr_req_feasible_trips_id
-                #check if we can serve the request without trying to serve it
-                
-                curr_fp = scenario_list[sc_id].feasible_paths[trip_id, :]
-                can_serve, can_serve_if_increment_cars = can_use_trip(sc_id, curr_fp, sol)
-                if can_serve
-                    sol.selected_paths[sc_id][curr_fp.fp_id] = true
-                end
-
-                if can_serve_if_increment_cars
-                    station_id = findfirst(x -> x == curr_fp.origin_station, get_potential_locations())
-                    sol.initial_cars_number[station_id] += 1
-                    push!(stations_to_increment_cars, station_id)
-                end
-                #= failed = false
-                E_carsharing_sim(sol)
-
-                if !failed
-                    #@info "request $req_id is served by trip $trip_id"
-                    #here we served the requests so we can break the loop
-                    break
-                else
-                    #here the selected path results a non feasible solution
-
-                    #check if we increment the number of cars in the origin station we can serve the request
-
-                    origin_station_id = findfirst(get_potential_locations() .== scenario_list[sc_id].feasible_paths.origin_station[trip_id])
-                    #@info "try to increment the cars number in the $origin_station_id of trip $trip_id"
-                    sol.initial_cars_number[origin_station_id] += 1
-                    #try to serve the request again
-                    failed = false##
-                    E_carsharing_sim(sol, sc_id)
-                    if !failed
-                        push!(stations_to_increment_cars, origin_station_id)
-                        #@info "serve request after increment number of cars in station $origin_station_id"
-                        break
-                    else
-                        sol.initial_cars_number[origin_station_id] -= 1
-                        sol.selected_paths[sc_id][trip_id] = false
-                    end
-                    #sol.selected_paths[sc_id][trip_id] = false
-                end =#
-            end
-        end
-    end
-    #return the new objective function
-    E_carsharing_sim(sol), sol.selected_paths, stations_to_increment_cars
-end
-
-function get_trips_station(station_id, feasible_trips)
-    station_node_id = get_potential_locations()[station_id]
-    trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id, feasible_trips)
-    trips
-end
-
-"""
-    can_use_trip(sc_id::Int64, trip::DataFrameRow, sol::Solution)
-
-    check if we can serve the trip in the solution
-"""
-function can_use_trip(sc_id::Int64, trip::DataFrameRow, sol::Solution)
-    #list of global variables
-    global stations
-    
-    #list of served trips 
-    sol_feasile_trips = scenario_list[sc_id].feasible_paths[sol.selected_paths[sc_id], :]
-
-    #general information about the new trip
-    trip_origin_station = trip.origin_station
-    trip_destination_station = trip.destination_station
-
-    initial_car_origin_station = sol.initial_cars_number[findfirst(get_potential_locations() .== trip_origin_station)]
-    origin_station_capacity = stations[findfirst(get_potential_locations() .== trip_origin_station)].max_number_of_charging_points
-    initial_car_destination_station = sol.initial_cars_number[findfirst(get_potential_locations() .== trip_destination_station)]
-    destination_station_capacity = stations[findfirst(get_potential_locations() .== trip_destination_station)].max_number_of_charging_points
-
-    #get all the trips involving the origin station and add the new trips and sort them
-    origin_station_trips = filter(row -> row.destination_station == trip_origin_station ||
-            row.origin_station == trip_origin_station, sol_feasile_trips)
-    #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
-    origin_station_trips.taking_or_parking_time = [row.origin_station == trip_origin_station ?
-                                                   row.start_driving_time : row.arriving_time for row in eachrow(origin_station_trips)]
-
-    #we add the trip and see if always the cars at this station are >= 0 
-    #(if negative we stop and we can not serve this request)
-    trip_as_df = DataFrame(trip)
-    trip_as_df.taking_or_parking_time = [trip.start_driving_time]
-    origin_station_trips = vcat(origin_station_trips, trip_as_df)
-    sort!(origin_station_trips, :taking_or_parking_time)
-
-    cars_at_station = initial_car_origin_station
-    can_serve = true
-    car_arriving_time = zeros(initial_car_origin_station) #keep track when cars are arrived to the station
-
-    for row in eachrow(origin_station_trips)
-        
-        if row.origin_station == trip_origin_station
-            cars_at_station -= 1
-            if cars_at_station < 0
-                can_serve = false
-                break
-            end
-            start_charging = pop!(car_arriving_time)
-            if start_charging == row.start_driving_time
-                can_serve = false
-                break
-            end
-        else
-            cars_at_station += 1
-            pushfirst!(car_arriving_time, row.arriving_time)
-        end
-    end
-    can_serve_if_we_increment_cars = false
-    if !can_serve
-        #=  # we can not handle the current request so we try to increment the number of cars in the station
-        #vars to investigate if we add a car to origin station we can serve the request
-        can_serve = true
-        cars_at_station = initial_car_origin_station + 1
-        car_arriving_time = zeros(initial_car_origin_station + 1)
-        #check the capacity
-        if cars_at_station > origin_station_capacity
-            #we cannot serve in both cases
-            return (false, false) 
-        end
-        for row in eachrow(origin_station_trips)
-        
-            if row.origin_station == trip_origin_station
-                cars_at_station -= 1
-                if cars_at_station < 0
-                    can_serve = false
-                    break
-                end
-                start_charging = pop!(car_arriving_time)
-                if start_charging == row.start_driving_time
-                    can_serve = false
-                    break
-                end
-            else
-                cars_at_station += 1
-                pushfirst!(car_arriving_time, row.arriving_time)
-                if cars_at_station > origin_station_capacity
-                    can_serve = false
-                    break
-                end
-            end
-        end
-        if !can_serve
-            return (false, false)
-        else
-            can_serve_if_we_increment_cars = true
-            
-        end =#
-        return (false, false)
-    end
-
-    destination_station_trips = filter(row -> row.destination_station == trip_destination_station ||
-            row.origin_station == trip_destination_station,
-        sol_feasile_trips)
-    #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
-    destination_station_trips.taking_or_parking_time = [row.origin_station == trip_destination_station ?
-                                                        row.start_driving_time : row.arriving_time for row in eachrow(destination_station_trips)]
-
-    #we add the trip and see if always the free parking spots this station are >= 0 
-    #(if negative we stop and we can not serve this request)
-    trip_as_df.taking_or_parking_time = [trip.arriving_time]
-    destination_station_trips = vcat(destination_station_trips, trip_as_df)
-    sort!(destination_station_trips, :taking_or_parking_time)
-
-    free_spots = destination_station_capacity - initial_car_destination_station
-
-    for row in eachrow(destination_station_trips)
-        row.origin_station == trip_destination_station ? free_spots += 1 : free_spots -= 1
-        if free_spots < 0
-            can_serve = false
-            break
-        end
-    end
-
-    return can_serve, can_serve_if_we_increment_cars
 end

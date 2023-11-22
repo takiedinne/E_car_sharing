@@ -46,8 +46,6 @@ function flipStationState(sol::Solution; mutation_number::Int64=1)
     for st in station_to_mutate
         curr_sol.open_stations_state[st] = !curr_sol.open_stations_state[st]
 
-       
-
         # keep track of the stations that were closed and opened
         if curr_sol.open_stations_state[st]
             push!(opened_stations, st)
@@ -567,4 +565,554 @@ function applyHeuristic(heurId::Int64, sol1::Solution, sol2::Solution)
     else
         error("heuristic id must be in $(crossoverHeuristics)")
     end
+end
+
+###############################################################################################################
+##################################### Utils functions #########################################################
+###############################################################################################################
+
+"""
+    serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64,1})
+    
+    this function tries to serve new requests after opening new station for each scenario
+    inputs:
+        @sol: the solution
+        @station_id: the id of the station that we recently oponed
+    outputs:
+        basicaly it return the new seletced paths ad assigne it as well to the onling_selected_paths so we 
+        could get it from there as well
+"""
+function serve_requests_after_opening_station(sol::Solution, stations_idx::Array{Int64,1})
+    #@info "*********** serve_requests_after_opening_station ***************"
+    #= @show stations_idx =#
+    @assert !online_request_serving && all(x -> x, sol.open_stations_state[stations_idx]) "we are in wrong mode or the station is closed"
+    
+    # declare some global variables
+    global online_request_serving
+    global failed
+
+    #get the nodes ids for the stations that we recently opened
+    station_nodes_idx = get_potential_locations()[stations_idx]
+    sol_stations_nodes_idx = get_potential_locations()[sol.open_stations_state]
+    
+    stations_to_increment_cars = Int64[]
+
+    #loop over each scenario and try to serve new requests
+    @threads for sc_id in eachindex(scenario_list)
+        #sc_id = 1
+        scenario = scenario_list[sc_id] # handle one scenario a time
+
+        # get the already served requests 
+        served_requests = scenario.feasible_paths.req[sol.selected_paths[sc_id]]
+
+        potential_feasible_paths = filter(scenario.feasible_paths) do fp
+            (fp.origin_station in station_nodes_idx && fp.destination_station in sol_stations_nodes_idx) ||
+                (fp.destination_station in station_nodes_idx && fp.origin_station in sol_stations_nodes_idx)
+        end
+
+        # keep only the requests that are not served yet
+        filter!(potential_feasible_paths) do fp
+            fp.req ∉ served_requests
+        end
+
+        #sort the requests according to their revenue
+        sort!(potential_feasible_paths, [:Rev, :req], rev=true)
+
+        new_served_requests = Int64[]
+
+        for curr_fp in eachrow(potential_feasible_paths)
+            #curr_fp = potential_feasible_paths[2, :]
+            #check if we already served the request
+            curr_fp.req in new_served_requests && continue
+            
+            #check if we can serve the request without trying to serve it
+            can_serve, can_serve_if_increment_cars = can_use_trip(sc_id, curr_fp, sol)
+            if can_serve
+                sol.selected_paths[sc_id][curr_fp.fp_id] = true
+                push!(new_served_requests, curr_fp.req)
+            end
+            
+            if can_serve_if_increment_cars
+                station_id = findfirst(x -> x == curr_fp.origin_station, get_potential_locations())
+                sol.initial_cars_number[station_id] += 1
+                push!(stations_to_increment_cars, station_id)
+            end
+
+        end
+    end
+
+    global online_selected_paths = sol.selected_paths
+    #@info "*********** end of serve_requests_after_opening_station ***************"
+    E_carsharing_sim(sol), stations_to_increment_cars
+end
+
+"""
+    can_use_trip(sc_id::Int64, trip::DataFrameRow, sol::Solution)
+
+    check if we can serve the trip in the solution
+    inputs:
+        @sc_id: the id of the scenario
+        @trip: the trip to be served
+        @sol: the solution
+
+    outputs:
+        true if we can serve the trip, false otherwise
+"""
+function can_use_trip(sc_id::Int64, trip::DataFrameRow, sol::Solution)
+    #list of global variables
+    stations = scenario_list[sc_id].stations
+    
+    #list of served trips 
+    sol_feasile_trips = scenario_list[sc_id].feasible_paths[sol.selected_paths[sc_id], :]
+
+    #general information about the new trip
+    trip_origin_station = trip.origin_station
+    trip_destination_station = trip.destination_station
+
+    initial_car_origin_station = sol.initial_cars_number[findfirst(get_potential_locations() .== trip_origin_station)]
+    origin_station_capacity = stations[findfirst(get_potential_locations() .== trip_origin_station)].max_number_of_charging_points
+    initial_car_destination_station = sol.initial_cars_number[findfirst(get_potential_locations() .== trip_destination_station)]
+    destination_station_capacity = stations[findfirst(get_potential_locations() .== trip_destination_station)].max_number_of_charging_points
+
+    #get all the trips involving the origin station and add the new trips and sort them
+    origin_station_trips = filter(row -> row.destination_station == trip_origin_station ||
+            row.origin_station == trip_origin_station, sol_feasile_trips)
+    #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
+    origin_station_trips.taking_or_parking_time = [row.origin_station == trip_origin_station ?
+                                                   row.start_driving_time : row.arriving_time for row in eachrow(origin_station_trips)]
+
+    #we add the trip and see if always the cars at this station are >= 0 
+    #(if negative we stop and we can not serve this request)
+    trip_as_df = DataFrame(trip)
+    trip_as_df.taking_or_parking_time = [trip.start_driving_time]
+    origin_station_trips = vcat(origin_station_trips, trip_as_df)
+    sort!(origin_station_trips, :taking_or_parking_time)
+
+    cars_at_station = initial_car_origin_station
+    can_serve = true
+    car_arriving_time = zeros(initial_car_origin_station) #keep track when cars are arrived to the station
+
+    for row in eachrow(origin_station_trips)
+        
+        if row.origin_station == trip_origin_station
+            cars_at_station -= 1
+            if cars_at_station < 0
+                can_serve = false
+                break
+            end
+            start_charging = pop!(car_arriving_time)
+            if start_charging == row.start_driving_time
+                can_serve = false
+                break
+            end
+        else
+            cars_at_station += 1
+            pushfirst!(car_arriving_time, row.arriving_time)
+        end
+    end
+    can_serve_if_we_increment_cars = false
+    if !can_serve
+        #=  # we can not handle the current request so we try to increment the number of cars in the station
+        #vars to investigate if we add a car to origin station we can serve the request
+        can_serve = true
+        cars_at_station = initial_car_origin_station + 1
+        car_arriving_time = zeros(initial_car_origin_station + 1)
+        #check the capacity
+        if cars_at_station > origin_station_capacity
+            #we cannot serve in both cases
+            return (false, false) 
+        end
+        for row in eachrow(origin_station_trips)
+        
+            if row.origin_station == trip_origin_station
+                cars_at_station -= 1
+                if cars_at_station < 0
+                    can_serve = false
+                    break
+                end
+                start_charging = pop!(car_arriving_time)
+                if start_charging == row.start_driving_time
+                    can_serve = false
+                    break
+                end
+            else
+                cars_at_station += 1
+                pushfirst!(car_arriving_time, row.arriving_time)
+                if cars_at_station > origin_station_capacity
+                    can_serve = false
+                    break
+                end
+            end
+        end
+        if !can_serve
+            return (false, false)
+        else
+            can_serve_if_we_increment_cars = true
+            
+        end =#
+        return (false, false)
+    end
+
+    destination_station_trips = filter(row -> row.destination_station == trip_destination_station ||
+            row.origin_station == trip_destination_station,
+        sol_feasile_trips)
+    #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
+    destination_station_trips.taking_or_parking_time = [row.origin_station == trip_destination_station ?
+                                                        row.start_driving_time : row.arriving_time for row in eachrow(destination_station_trips)]
+
+    #we add the trip and see if always the free parking spots this station are >= 0 
+    #(if negative we stop and we can not serve this request)
+    trip_as_df.taking_or_parking_time = [trip.arriving_time]
+    destination_station_trips = vcat(destination_station_trips, trip_as_df)
+    sort!(destination_station_trips, :taking_or_parking_time)
+
+    free_spots = destination_station_capacity - initial_car_destination_station
+
+    for row in eachrow(destination_station_trips)
+        row.origin_station == trip_destination_station ? free_spots += 1 : free_spots -= 1
+        if free_spots < 0
+            can_serve = false
+            break
+        end
+    end
+
+    return can_serve, can_serve_if_we_increment_cars
+end
+
+
+"""
+    clean_up_cars_number!(sol::Solution)
+    
+    This function clean up the solution to serve the requests using only 
+    minimal number of cars it alters the initial number of cars in the solution
+    inputs:
+        @sol: the solution
+    outputs:
+        the new objective function
+"""
+function clean_up_cars_number!(sol::Solution)
+    global used_cars
+    
+    # the way that the cars are created are basically when we instantiate the stations
+    E_carsharing_sim(sol)
+    new_initial_number_of_cars = Array{Int64}(undef, length(sol.initial_cars_number))
+    car_id = 1
+
+    for station_id in eachindex(sol.initial_cars_number)
+        old_init_car_numbers = car_id:car_id+sol.initial_cars_number[station_id]-1
+        car_id += sol.initial_cars_number[station_id]
+
+        new_initial_number_of_cars[station_id]  = count([x in used_cars for x in old_init_car_numbers])
+    end
+
+    sol.initial_cars_number = new_initial_number_of_cars
+
+    #return the new objective function
+    E_carsharing_sim(sol)
+
+end
+
+"""
+    clean Up the selecte paths after closing (a) station(s).
+    inputs:
+        @sol: the solution
+    outputs:
+        the new objective function
+"""
+function clean_up_selected_paths_MT_old!(sol::Solution)
+    #println("************** cleaning up selected paths **************")
+    global failed
+    global current_scenario_id
+    global trips_to_unselect
+    
+    sol_selected_path_lock = ReentrantLock() 
+    #first the trivial case: unselect all the trips that contains a closed station
+    @threads for sc in eachindex(sol.selected_paths)
+        scenario = scenario_list[sc]
+        for fp in eachindex(sol.selected_paths[sc])
+            
+            if sol.selected_paths[sc][fp]
+                #get the trip information
+                origin_station_id = findfirst(get_potential_locations() .== scenario.feasible_paths.origin_station[fp])
+                destination_station_id = findfirst(get_potential_locations() .== scenario.feasible_paths.destination_station[fp])
+
+                if !sol.open_stations_state[origin_station_id] || !sol.open_stations_state[destination_station_id]
+                    Threads.lock(sol_selected_path_lock)
+                    try
+                        sol.selected_paths[sc][fp] = false
+                    finally
+                        Threads.unlock(sol_selected_path_lock)
+                    end
+                end
+            end
+        end
+    end
+    
+    # second step is to run the simulation and see if everything is okay.
+    # if there still trips that cause infeasible solution we unselect them
+    failed = Threads.Atomic{Bool}(true)
+    fit_value = 10^16
+    set_online_mode(false)
+    while failed[]
+        findall(x->length(x)>0, trips_to_unselect) 
+        trips_to_unselect = [Int64[] for _ in eachindex(scenario_list)]
+        fit_value = E_carsharing_sim(sol)
+        
+        for i in eachindex(scenario_list)
+            sol.selected_paths[i][trips_to_unselect[i]] .= false
+        end
+    end
+
+
+    fit_value, sol.selected_paths
+end
+
+"""
+    clean_up_selected_paths!(sol::Solution)
+    clean Up the selecte paths after closing (a) station(s).
+    inputs:
+        @sol: the solution
+    outputs:
+        the new objective function
+        the new list of the sletced paths
+"""
+function clean_up_selected_paths!(sol::Solution)
+    
+    #println("************** cleaning up selected paths **************")
+    global failed
+    global current_scenario_id
+    global trips_to_unselect
+        
+    sol_selected_path_lock = ReentrantLock() 
+    
+    @threads for sc in eachindex(sol.selected_paths)
+        scenario = scenario_list[sc]
+        stations_to_recheck = Int64[]
+        for fp in eachindex(sol.selected_paths[sc])
+            #first Step: unselect all the trips that contains a closed station and mark the closed stations
+            if sol.selected_paths[sc][fp]
+                #get the trip information
+                origin_station_id = findfirst(get_potential_locations() .== scenario.feasible_paths.origin_station[fp])
+                destination_station_id = findfirst(get_potential_locations() .== scenario.feasible_paths.destination_station[fp])
+
+                #check if one of its stations is closed
+                if !sol.open_stations_state[origin_station_id] || !sol.open_stations_state[destination_station_id]
+                    #unselect the trip
+                    Threads.lock(sol_selected_path_lock)
+                    try
+                        sol.selected_paths[sc][fp] = false
+                    finally
+                        Threads.unlock(sol_selected_path_lock)
+                    end
+                    #keep track of the opened station to recheck them
+                    if sol.open_stations_state[origin_station_id]
+                        push!(stations_to_recheck, origin_station_id)
+                    elseif sol.open_stations_state[destination_station_id]
+                        push!(stations_to_recheck, destination_station_id)
+                    end
+                end
+            end
+
+        end
+        #save_sol(sol, "sol1.jls")
+        #second step: recheck the opened stations
+        unique!(stations_to_recheck)
+        for station_id in stations_to_recheck
+            additional_station_to_recheck = recheck_station!(sol, scenario, station_id, sol_selected_path_lock)
+            length(additional_station_to_recheck) > 0 && push!(stations_to_recheck, additional_station_to_recheck...)
+        end
+    end
+    #re-evaluate the solution
+    fit_value = E_carsharing_sim(sol)
+    fit_value, sol.selected_paths
+end
+
+"""
+    recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64, sol_lock::ReentrantLock)
+
+    when we close a station, some other stations are serving requests by cars came from the closed station
+    or after freeing a parking place after sending a car to the closed station. This function check if a station
+    still serve the requests after closing a station. If not, it unselect the trip.
+
+    inputs:
+        @sol: the solution
+        @scenario: the scenario
+        @station_id: the id of the station to recheck
+        @sol_lock: the lock to protect the solution
+
+    outputs:
+        the list of stations to recheck again
+"""
+function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64, sol_lock::ReentrantLock)
+    # sol, scenario, station_id = load_sol("sol1.jls"), scenario_list[4], 79;
+    #list of served trips 
+    selected_trips = scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :]
+    
+    initial_car_nbr = sol.initial_cars_number[station_id]
+    station_capacity = scenario.stations[station_id].max_number_of_charging_points
+    station_node_id = get_potential_locations()[station_id]
+    
+    #get all the trips involving the origin station and add the new trips and sort them
+    station_trips = filter(row -> row.destination_station == station_node_id ||
+            row.origin_station == station_node_id, selected_trips)
+    
+    #add a column to the dataframe to keep track of the taking or parking time to make the sorting easy
+    station_trips.taking_or_parking_time = [row.origin_station == station_node_id ?
+                                                   row.start_driving_time : row.arriving_time for row in eachrow(station_trips)]
+
+    #sort the trips according to their taking or parking time
+    sort!(station_trips, :taking_or_parking_time)
+
+    cars_at_station = initial_car_nbr
+    car_arriving_time = zeros(initial_car_nbr) #keep track when cars are arrived to the station
+
+    add_stations_to_recheck = Int64[]
+
+    for row in eachrow(station_trips)
+        #row = station_trips[5, :]
+        if row.origin_station == station_node_id #we are taking a car from the station
+            cars_at_station -= 1
+            if cars_at_station < 0
+                #unselect the trip
+                Threads.lock(sol_lock)
+                try
+                    sol.selected_paths[scenario.scenario_id][row.fp_id] = false
+                    cars_at_station += 1
+                    push!(add_stations_to_recheck, findfirst(get_potential_locations() .== row.destination_station))
+                finally
+                    Threads.unlock(sol_lock)
+                    continue
+                end
+            end
+            
+            start_charging = pop!(car_arriving_time)
+            if start_charging == row.start_driving_time
+                Threads.lock(sol_lock)
+                try
+                    sol.selected_paths[scenario.scenario_id][row.fp_id] = false
+                    cars_at_station += 1
+                    push!(add_stations_to_recheck, findfirst(get_potential_locations() .== row.destination_station))
+                    push!(car_arriving_time, start_charging)
+                finally
+                    Threads.unlock(sol_lock)
+                end
+            end
+        else
+            cars_at_station += 1
+            if cars_at_station > station_capacity
+                Threads.lock(sol_lock)
+                try
+                    sol.selected_paths[scenario.scenario_id][row.fp_id] = false
+                    cars_at_station -= 1
+                    push!(add_stations_to_recheck, findfirst(get_potential_locations() .== row.origin_station))
+                finally
+                    Threads.unlock(sol_lock)
+                end
+            end
+            pushfirst!(car_arriving_time, row.arriving_time)
+        end
+
+    end
+
+    return add_stations_to_recheck
+end
+
+"""
+    serve_requests(sol::Solution, requests_list::Array{Int64, 1})
+    given a list of requests try to serve them using theopened stations in the solution
+
+    inputs:
+        @sol: the solution
+        @requests_list: the list of requests to serve for each scenario
+    outputs:
+        the new objective function
+"""
+function serve_requests!(sol::Solution, requests_list::Vector{Vector{Int64}})
+    #@info "************** serving requests **************"
+    
+    opend_stations_node_ids = get_potential_locations()[sol.open_stations_state]
+    stations_to_increment_cars = Int64[]
+
+    @threads for sc_id in eachindex(requests_list)
+        curr_scenario = scenario_list[sc_id]
+        #loop over the requests
+        for req_id in requests_list[sc_id]
+            #get the feasible trips for the current request
+            curr_req_feasible_trips_id = findall(x -> curr_scenario.feasible_paths.req[x] == req_id &&
+                                                    curr_scenario.feasible_paths.origin_station[x] in opend_stations_node_ids &&
+                                                    curr_scenario.feasible_paths.destination_station[x] in opend_stations_node_ids,
+                1:nrow(curr_scenario.feasible_paths))
+
+            for trip_id in curr_req_feasible_trips_id
+                #check if we can serve the request without trying to serve it
+                curr_fp = curr_scenario.feasible_paths[trip_id, :]
+                can_serve, can_serve_if_increment_cars = can_use_trip(sc_id, curr_fp, sol)
+                if can_serve
+                    sol.selected_paths[sc_id][curr_fp.fp_id] = true
+                end
+
+                if can_serve_if_increment_cars
+                    station_id = findfirst(x -> x == curr_fp.origin_station, get_potential_locations())
+                    sol.initial_cars_number[station_id] += 1
+                    push!(stations_to_increment_cars, station_id)
+                end
+            end
+        end
+    end
+    #return the new objective function
+    E_carsharing_sim(sol), sol.selected_paths, stations_to_increment_cars
+end
+
+"""
+    get_trips_station(station_id::Int64, feasible_trips::DataFrame)
+
+    given the list of feasible trips this function return the trips where station_id intervened
+    inputs:
+        @station_id: the id of the station
+        @feasible_trips: the list of feasible trips
+
+    outputs:
+        the trips where station_id intervened
+"""
+function get_trips_station(station_id::Int64, feasible_trips::DataFrame)
+    station_node_id = get_potential_locations()[station_id]
+    trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id, feasible_trips)
+    trips
+end
+
+function serve_requests_old!(sol::Solution, requests_list::Vector{Vector{Int64}})
+    #@info "************** serving requests **************"
+   
+    opend_stations_node_ids = get_potential_locations()[sol.open_stations_state]
+    stations_to_increment_cars = Int64[]
+
+    for sc_id in eachindex(requests_list)
+        curr_scenario = scenario_list[sc_id]
+        #loop over the requests
+        for req_id in requests_list[sc_id]
+            #get the feasible trips for the current request
+            curr_req_feasible_trips_id = findall(x -> curr_scenario.feasible_paths.req[x] == req_id &&
+                                                    scenario_list[sc_id].feasible_paths.origin_station[x] in opend_stations_node_ids &&
+                                                    scenario_list[sc_id].feasible_paths.destination_station[x] in opend_stations_node_ids,
+                1:nrow(scenario_list[sc_id].feasible_paths))
+
+            for trip_id in curr_req_feasible_trips_id
+                #check if we can serve the request without trying to serve it
+                
+                curr_fp = scenario_list[sc_id].feasible_paths[trip_id, :]
+                can_serve, can_serve_if_increment_cars = can_use_trip(sc_id, curr_fp, sol)
+                if can_serve
+                    sol.selected_paths[sc_id][curr_fp.fp_id] = true
+                end
+
+                if can_serve_if_increment_cars
+                    station_id = findfirst(x -> x == curr_fp.origin_station, get_potential_locations())
+                    sol.initial_cars_number[station_id] += 1
+                    push!(stations_to_increment_cars, station_id)
+                end
+            end
+        end
+    end
+    #return the new objective function
+    E_carsharing_sim(sol), sol.selected_paths, stations_to_increment_cars
 end

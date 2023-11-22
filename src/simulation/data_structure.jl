@@ -65,5 +65,7 @@ mutable struct Scenario
     scenario_id::Int64
     request_list::DataFrame 
     feasible_paths::DataFrame
+    stations::Array{Station, 1}
+    revenue::Float64
 end
 
