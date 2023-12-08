@@ -70,7 +70,7 @@ global print_preprocessing = false
 global print_simulation = false
 global printMIP = false
 # generale parameters:
-global online_request_serving = false # true if we consider the requests by their arrival order
+global online_request_serving = true #true if we consider the requests by their arrival order
 global penality = 10^16 # if the solution is infeasible so we return this penality
 global work_with_time_slot = true
 global cost_factor = 10^5 # or 10^5

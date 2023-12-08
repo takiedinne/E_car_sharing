@@ -16,6 +16,10 @@ global manhaten_city_driving_graph = (multiple_driving_speeds) ? loadgraph(Manha
 global manhaten_city_length_graph = loadgraph(Manhatten_network_length_graph_file, MGFormat())
 
 global potential_locations = Int64[] # the index of all potential stations 
+locations_dict = Dict{Int64,Int64}()
+for i in eachindex(get_potential_locations())
+    locations_dict[get_potential_locations()[i]] = i
+end
 #read all requests details
 global all_request_df = CSV.read(all_request_details_path, DataFrame)
 
@@ -44,6 +48,7 @@ global current_scenario_id = 1
 global trips_to_unselect = []
 global trips_to_unselect_lock = ReentrantLock()
 
+global stations_capacity = [get_prop(manhaten_city_driving_graph, potential_locations[i], :max_number_of_charging_points) for i in eachindex(get_potential_locations())]
 
 ############################### Multi threading ##################################
 
@@ -58,21 +63,22 @@ function E_carsharing_sim(sol::Solution)
     global used_cars = Int64[]
     global failed = Threads.Atomic{Bool}(false)
     #check the feasibilty of the solution
-    if is_feasible_solution(sol)
+    
+    if  is_feasible_solution(sol)
         
-        if online_request_serving
+        if online_request_serving 
             # we have to reset the selected paths inside the solution only for the selected paths
             global online_selected_paths = [Array{Bool,1}(falses(nrow(scenario_list[sc].feasible_paths))) for sc in eachindex(scenario_list)]
         end
-
+        
         sc_fit = Array{Float64,1}(undef, length(scenario_list))
         
-        @threads for i in eachindex(scenario_list)
+        for i in eachindex(scenario_list)
             
             if failed[]
                 break
             end
-
+            
             f_x_sc = E_carsharing_sim(sol, i)
            
             sc_fit[i] = f_x_sc
@@ -93,16 +99,16 @@ function E_carsharing_sim(sol::Solution)
 end
 
 function E_carsharing_sim(sol::Solution, scenario_id::Int64)
+    
+    scenario = scenario_list[scenario_id]
+
+    initialize_sim(sol, scenario) 
 
     if !is_feasible_solution(sol)
         print_simulation && @warn "Error: The solution is not feasible"
         return Inf
     end
-   
-    scenario = scenario_list[scenario_id]
 
-    initialize_sim(sol, scenario) 
-    
     sim = Simulation()
     if online_request_serving
         @process request_arrival_process_online_mode(sim, scenario, sol)
@@ -118,30 +124,28 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
         # count the objective function
         print_simulation && println("counting the objective function")
         
-        total_cars_cost = sum(Array{Float64}(
-                    [vehicle_specific_values[i][:car_cost] 
-                    for i in vcat([scenario.stations[i].cars.car_type 
-                        for i in eachindex(scenario.stations)]...)]))
+        total_cars_cost = sum([vehicle_specific_values[ct][:car_cost] for ct in 
+                                vcat([scenario.stations[st].cars.car_type for st in findall(sol.open_stations_state)]...)])
         
-        total_station_cost = sum(Array{Float64}([station.charging_station_base_cost +
+        total_station_cost = sum([station.charging_station_base_cost +
                                   station.max_number_of_charging_points * station.charging_point_cost_fast
-                                  for station in scenario.stations[sol.open_stations_state]]))
+                                  for station in scenario.stations[sol.open_stations_state]])
                                     
        
         return scenario.revenue - (total_cars_cost + total_station_cost) / cost_factor
     end
 end
 
-function initialize_sim(sol::Solution, scenario::Scenario)
+function initialize_sim_old(sol::Solution, scenario::Scenario)
     
     scenario.stations = Array{Station,1}()
     scenario.revenue = 0.0
     
     #set the stations
+   
     car_id = 1
-    for i in 1:length(sol.open_stations_state)
+    for i in eachindex(sol.open_stations_state)
         initial_cars_number = sol.initial_cars_number[i]
-        
         push!(scenario.stations, Station(get_potential_locations()[i], initial_cars_number, car_id))
         car_id += initial_cars_number
     end
@@ -159,6 +163,71 @@ function initialize_sim(sol::Solution, scenario::Scenario)
         end
     end
     scenario.request_list.fp = fp
+end
+
+function initialize_sim(sol::Solution, scenario::Scenario)
+    
+    if isempty(scenario.stations)
+        scenario.revenue = 0.0
+        #set the stations
+        car_id = 1
+        for i in eachindex(sol.open_stations_state)
+            initial_cars_number = sol.initial_cars_number[i]
+            push!(scenario.stations, Station(get_potential_locations()[i], initial_cars_number, car_id))
+            car_id += initial_cars_number
+        end
+    else
+        
+        car_id = 1
+        @inbounds for i in eachindex(sol.open_stations_state)
+            
+            if !sol.open_stations_state[i]
+                scenario.stations[i].cars = DataFrame()
+                scenario.stations[i].parking_places = DataFrame()
+            else
+
+                initial_cars_number = sol.initial_cars_number[i]
+                
+                scenario.stations[i].cars = DataFrame(car_id = collect(car_id:(car_id + initial_cars_number -1)),
+                            car_type = [Smart_ED for _ in 1:initial_cars_number],
+                            status = [CAR_PARKED for _ in 1:initial_cars_number],
+                            last_battery_level = [100.0 for _ in 1:initial_cars_number],
+                            start_charging_time = [0.0 for _ in 1:initial_cars_number],
+                            start_reservation_time = [NaN for _ in 1:initial_cars_number],
+                            pending_reservation = [0 for _ in 1:initial_cars_number],
+                            expected_arrival_time = [NaN for _ in 1:initial_cars_number])
+                
+                
+                #create the parking places
+                total_parking_places = scenario.stations[i].max_number_of_charging_points
+                scenario.stations[i].parking_places = DataFrame(p_id = collect(1:total_parking_places), 
+                                    status = vcat([P_OCCUPIED for _ in 1:initial_cars_number],
+                                                    [P_FREE for _ in 1:(total_parking_places - initial_cars_number)]), 
+                                    cars = vcat(collect(car_id:(car_id + initial_cars_number -1)),
+                                                        [-1 for _ in 1:(total_parking_places - initial_cars_number)]),
+                                    pending_reservation = [0 for _ in 1:total_parking_places] )
+
+                car_id += initial_cars_number
+            end  
+        end
+       
+    end
+    
+    # we set the feasible trips Ids in fp column
+    fp = [Int[] for _ in eachindex(scenario.request_list.reqId)]
+    if online_request_serving
+        # case 1: we set all feasible paths for each requests so we can take info from it later
+        @inbounds for i in eachindex(scenario.feasible_paths.req)
+            push!(fp[scenario.feasible_paths.req[i]], i)
+        end
+    else
+        @inbounds for i in eachindex(scenario.feasible_paths.req)
+            sol.selected_paths[scenario.scenario_id][i] && push!(fp[scenario.feasible_paths.req[i]], i)
+        end
+    end
+
+    scenario.request_list.fp = fp
+    scenario.revenue = 0.0
 end
 
 function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_scenario::Union{Nothing,Int64}=nothing)
@@ -220,9 +289,8 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
 end
 ############################### Offline functions ###############################
 @resumable function request_arrival_process_offline_mode(env::Environment, scenario::Scenario, sol::Solution)
-    
     #browse all the requests (the requests are sorted according to their arrival time)
-    for req in eachrow(scenario.request_list)
+    @inbounds for req in eachrow(scenario.request_list)
         
         if failed[]
             #@info "scenario : $(scenario.scenario_id) end Thread: $(Threads.threadid()) "
@@ -242,28 +310,12 @@ end
             continue
         else
             path = scenario.feasible_paths[req.fp[1], :]
-            pickup_station_id = findfirst(get_potential_locations() .== path.origin_station[1])
-            drop_off_station_id = findfirst(get_potential_locations() .== path.destination_station[1])
-            
-            #check if the stations are opened
-            if !sol.open_stations_state[pickup_station_id] || !sol.open_stations_state[drop_off_station_id]
-                print_simulation && @warn "Customer [$(req.reqId)]: infeasible solution. one selected path contains a close stations"
-                failed[] = true
-                break
-            end
 
-            # check the availabilty of paths to serve the request
-            if isempty(pickup_station_id) || isempty(drop_off_station_id)
-                # we couldn't serve the request there is no feasible path
-                print_simulation && @warn "Customer [$(req.reqId)]: We can not serve the request there is no feasible path"
-                
-                failed[] = true
-                
-                break
-            else
-                selected_car_id, parking_place_id = -1, -1
-                @process perform_the_trip_process_offline_mode(env, req, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, scenario)
-            end
+            pickup_station_id = locations_dict[path.origin_station[1]]
+            drop_off_station_id = locations_dict[path.destination_station[1]]
+        
+            selected_car_id, parking_place_id = -1, -1
+            @process perform_the_trip_process_offline_mode(env, req, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, scenario)
         end
 
     end
@@ -271,10 +323,11 @@ end
 end
 
 @resumable function perform_the_trip_process_offline_mode(env::Environment,
-         req::DataFrameRow, pickup_station_id, drop_off_station_id, selected_car_id,
-          parking_place_id, scenario::Scenario)
-    
-    potential_locations = get_potential_locations() #to get the node id of station
+    req::DataFrameRow, pickup_station_id, drop_off_station_id, selected_car_id,
+    parking_place_id, scenario::Scenario)
+
+
+    global potential_locations
     pickup_station, drop_off_station = scenario.stations[pickup_station_id], scenario.stations[drop_off_station_id]
     
     #simulate teh different steps of the trip
@@ -283,7 +336,7 @@ end
 
     start_walking_time = now(env)
     start_driving_time = start_walking_time + walking_duration
-    
+
     driving_duration = get_trip_duration(potential_locations[pickup_station_id], potential_locations[drop_off_station_id], start_driving_time)
     work_with_time_slot && driving_duration != Inf && (driving_duration = ceil(Int64, driving_duration / time_slot_length))
 
@@ -297,52 +350,43 @@ end
     # check and select a car to performe the trip
     cars = pickup_station.cars
     refrech_battery_levels!(cars, now(env)) #refrech the battery leveles 
-    available_car_df = filter(row -> row.status == CAR_PARKED &&
-            row.last_battery_level >= get_battery_level_needed((pickup_station_id, drop_off_station_id)),
-            cars)
+    
+    battery_needed = get_battery_level_needed((pickup_station_id, drop_off_station_id))
+    available_cars_ids = findall(cars.status .== CAR_PARKED .&& cars.last_battery_level .>= battery_needed)
 
-    if isempty(available_car_df)
+    if isempty(available_cars_ids)
         #double check if there is another request (at this moment) that can help to serve the current request
         # to do so only we need to handle this request again after we done with all the requests at this moment 
         @yield timeout(env, 0.0, priority=-1) # put this process at the end of the heap for the current time
         #check again
-        available_car_df = filter(row -> row.status == CAR_PARKED &&
-                row.last_battery_level >= get_battery_level_needed((pickup_station_id, drop_off_station_id)),
-                pickup_station.cars)
+        available_cars_ids = findall(cars.status .== CAR_PARKED .&& cars.last_battery_level .>= battery_needed)
     end
 
-    if !isempty(available_car_df)
+    if !isempty(available_cars_ids)
         # simply we take the last found car
-        selected_car_id = available_car_df.car_id[end]
+        selected_car_id = cars.car_id[available_cars_ids[end]]
         # put the selected cars to used_cars to track the used them
         Threads.lock(used_cars_lock)
         try
             if !in(selected_car_id, used_cars)
-
-            
                 push!(used_cars, selected_car_id)
             end
         finally
             Threads.unlock(used_cars_lock)
         end
-        
+
         # update the status of the car
-        pickup_station.cars.status[findfirst(x -> x == selected_car_id, pickup_station.cars.car_id)] = CAR_RESERVED
+        pickup_station.cars.status[available_cars_ids[end]] = CAR_RESERVED
 
         # add the car in the drop_off station 
-        car = DataFrame(available_car_df[end, :]) # copy
-        car.status[1] = CAR_ON_WAY
-        car.start_charging_time[1] = NaN
-        car.expected_arrival_time[1] = now(env) + driving_duration
-        car.last_battery_level[1] -= get_trip_battery_consumption(potential_locations[pickup_station_id],
-            potential_locations[drop_off_station_id],
-            car.car_type[1])
-        #insert it to the last position
-        append!(drop_off_station.cars, car)
+        new_battery_level = cars.last_battery_level[available_cars_ids[end]] - get_trip_battery_consumption(potential_locations[pickup_station_id],
+            potential_locations[drop_off_station_id], cars.car_type[available_cars_ids[end]])
+        push!(drop_off_station.cars, (selected_car_id, cars.car_type[available_cars_ids[end]], CAR_ON_WAY, new_battery_level,
+                NaN, NaN, 0, now(env) + driving_duration )) # copy
     else
         print_simulation && @warn "Customer [$(req.reqId)]: (offline mode) there is no available car at the station "
         failed[] = true
-        
+
         Threads.lock(trips_to_unselect_lock)
         try
             push!(trips_to_unselect[scenario.scenario_id], req.fp[1])
@@ -355,20 +399,20 @@ end
 
     print_simulation && println("Customer [", req.reqId, "]: start ridding the car number $selected_car_id at $(now(env))")
     start_driving(pickup_station, selected_car_id) # this function put failed true if there is not a car with the consumption constraints
-
+    
     #simulate the riding time
     driving_duration > 0 && @yield timeout(env, driving_duration)
 
     #get the available parking places
-    available_places_df = filter(row -> row.status == P_FREE, drop_off_station.parking_places)
-    if isempty(available_places_df)
+    available_places_ids = findall(drop_off_station.parking_places.status .== P_FREE)
+    if isempty(available_places_ids)
         #double check if there is another request that can help to serve the current request
         @yield timeout(env, 0.0, priority=-1) # put this process at the end of the heap for the current time
-        available_places_df = filter(row -> row.status == P_FREE, drop_off_station.parking_places)
+        available_places_ids = findall(drop_off_station.parking_places.status .== P_FREE)
     end
-    if !isempty(available_places_df)
+    if !isempty(available_places_ids)
         # simply we select the first free place
-        parking_place_id = available_places_df.p_id[1]
+        parking_place_id = drop_off_station.parking_places.p_id[available_places_ids[1]]
         # reserve the place 
         drop_off_station.parking_places.status[parking_place_id] = P_RESERVED
     else
@@ -395,8 +439,10 @@ end
 
 ############################### Online functions ###############################
 @resumable function request_arrival_process_online_mode(env::Environment, scenario::Scenario, sol::Solution)
+    
     #browse all the requests (the requests are sorted according to their arrival time)
-    for req in eachrow(scenario.request_list)
+    @inbounds for req in eachrow(scenario.request_list)
+        
         if failed[]
             break
         end
@@ -408,10 +454,10 @@ end
 
         # get the trip information (pickup station, drop off station, the selected car id, parking place)
         # if the request can not be served, this function will return -1 in one of the information variables
+    
         pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id = get_trip_info_for_request(req, sol, scenario, now(env)) # one row Dataframe
-
         # check the availabilty of paths to serve the request
-        if pickup_station_id != -1 && drop_off_station_id != -1 && selected_car_id != -1 && parking_place_id != -1
+        if  !isnothing(selected_car_id) && !isnothing(parking_place_id)
             #book the trip (the car + parking palce ,etc) only for the 
             walking_duration = get_walking_time(req.ON, potential_locations[pickup_station_id])
             work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
@@ -443,7 +489,7 @@ end
                 end
             end
 
-            print_simulation && @warn "Customer [$(req.reqId)]: We can not serve the request there is no feasible path ($cause_message)"
+            print_simulation && println("Customer [$(req.reqId)]: We can not serve the request there is no feasible path ($cause_message)")
         end
     end
 
@@ -492,6 +538,7 @@ end
 
     # drop the car
     print_simulation && println("Customer [", req.reqId, "]: drop the car off at the station ", potential_locations[drop_off_station_id], " at ", now(env))
+    #@info "drop_off scenario: $(scenario.scenario_id), request: $(req.reqId)"
     drop_car(drop_off_station, selected_car_id, parking_place_id, now(env))
 
     # make the payment
@@ -500,10 +547,8 @@ end
 end
 ############################### Genrale functions ###############################
 function start_driving(station::Station, car_id::Int64)
-
     car_indx = findfirst(station.cars.car_id .== car_id)
     parking_place_indx = findfirst(station.parking_places.cars .== car_id)
-
     if car_indx === nothing || parking_place_indx === nothing
         @warn "Error: the car or the parking place are not found "
         global failed[] = true
@@ -517,17 +562,21 @@ function start_driving(station::Station, car_id::Int64)
     else
         station.parking_places.status[parking_place_indx] = P_FREE
     end
+    
     station.parking_places.cars[parking_place_indx] = -1 # there is no cars
 
-    # delete the car from the station 
+    # delete the car from the station
     filter!(row -> (row.car_id != car_id), station.cars)
 end
 
 function drop_car(drop_off_station, car_id, parking_place_id, current_time)
-
     # check if the parking place is free (basically it will be free but just we check if there is a problem)
     if drop_off_station.parking_places.status[parking_place_id] == P_OCCUPIED
-        @warn "Error: the parking place is occupied there is problem in the simulatiuon logic station $(drop_off_station) "
+        println("************************************")
+        @show drop_off_station.cars
+        @show drop_off_station.parking_places
+        println("************************************")
+        #@warn "Error: the parking place is occupied there is problem in the simulatiuon logic station $(drop_off_station) "
         global failed[] = true
         return
     end
@@ -550,7 +599,7 @@ function drop_car(drop_off_station, car_id, parking_place_id, current_time)
     global number_of_served_requests[] += 1
 end
 
-function is_feasible_solution(sol::Solution)
+function is_feasible_solution_old(sol::Solution)
     
     #check if the dimention of the solution fields are correctly defined
     if length(get_potential_locations()) != length(sol.open_stations_state) != length(sol.initial_cars_number)
@@ -598,6 +647,54 @@ function is_feasible_solution(sol::Solution)
     return true
 end
 
+function is_feasible_solution(sol::Solution)
+    #global variables
+    global stations_capacity
+    global scenario_list
+
+    #check if the dimension of the solution fields are correctly defined
+    if length(get_potential_locations()) != length(sol.open_stations_state) != length(sol.initial_cars_number)
+        print_simulation && printstyled(stdout, "the solution fields are not correctly defined\n", color=:light_red)
+        failed[] = true
+        return false
+    end
+
+    #check the initial number of cars (constraint 7 and 8)
+    capacity_mask = sol.open_stations_state .* stations_capacity
+    if sol.initial_cars_number > capacity_mask 
+        print_simulation && println("the initial number of cars in the station ", potential_locations[i], " is greater the the total allowed number (or a stations contains cars despite it is closed")
+        failed[] = true
+        return false
+    end
+    
+    if !online_request_serving
+        stations_nodes = potential_locations[sol.open_stations_state]
+        for s in eachindex(sol.selected_paths)
+            selected_paths = scenario_list[s].feasible_paths[sol.selected_paths[s], :]
+            # check if the customer is served by  at most one trip (constraint 2)
+            if !allunique(selected_paths.req)
+                print_simulation && println("there is at least a customer served by more than one trip in scenario $s")
+                failed[] = true
+                return false
+            end
+
+            #check if each station in the selected trips is open (constraint 3)
+
+            #get the oponed stations as dataframes (the number of node in the graph)
+            
+            if !all(in.(selected_paths.origin_station,  Ref(stations_nodes))) ||
+                    !all(in.(selected_paths.destination_station,  Ref(stations_nodes)))
+                
+                print_simulation && println("there is at least one closed station in the feasible paths")
+                failed[] = true
+                return false
+            end
+        end
+        # constraint 4, 5 and 6  are to be checked in the simulation
+    end
+
+    return true
+end
 """
     description: GET ALL THE INFORMATION RELATIVE TO THE REQUEST
     inputs: 
@@ -612,18 +709,19 @@ end
 """
 function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, current_time)
     # vars to return 
-    pickup_station_id = -1
-    drop_off_station_id = -1
-    selected_car_id = -1
-    parking_place_id = -1
-
+    pickup_station_id = nothing
+    drop_off_station_id = nothing
+    selected_car_id = nothing
+    parking_place_id = nothing
+    
     for path_id in req.fp
         path = scenario.feasible_paths[path_id, :]
         # reset the vars to be returned
-        selected_car_id = -1 # the id of the car to be used to perform the trip
-        parking_place_id = -1 # the id of the parking place in the drop off station
-        pickup_station_id = findfirst(potential_locations .== path.origin_station)
-        drop_off_station_id = findfirst(potential_locations .== path.destination_station)
+        selected_car_id = nothing # the id of the car to be used to perform the trip
+        parking_place_id = nothing # the id of the parking place in the drop off station
+        
+        pickup_station_id = locations_dict[path.origin_station]
+        drop_off_station_id = locations_dict[path.destination_station]
         
         pickup_station, drop_off_station = scenario.stations[pickup_station_id], scenario.stations[drop_off_station_id]
         #check if the stations are opened
@@ -638,31 +736,35 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
         work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
 
         expected_start_riding_time = current_time + walking_duration
-        #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
-        available_car_df = filter(row -> row.status == CAR_PARKED ||
-                (row.status == CAR_ON_WAY && row.expected_arrival_time <= expected_start_riding_time),
-            pickup_station.cars)
-
         
-        if !isempty(available_car_df)
-
+        #get the list (as DataFrame) of cars that are available for the customer (parked cars + expected to arrive befor the starting time)
+       
+        available_cars_ids = findall(pickup_station.cars.status .== CAR_PARKED)
+        if isempty(available_cars_ids)
+            # check on way cars
+            available_cars_ids = findall(pickup_station.cars.status .== CAR_ON_WAY 
+                                    .|| pickup_station.cars.expected_arrival_time .<= expected_start_riding_time) 
+        end
+    
+        if !isempty(available_cars_ids)
+            
             # first we count the actual battery levels
             refrech_battery_levels!(pickup_station.cars, current_time) # count the actual battery levels
 
             # second, count the expected battery level at the time of departure of the trip.
-            expected_battery_levels = get_expected_battery_levels(available_car_df, expected_start_riding_time)
-
+            expected_battery_levels = get_expected_battery_levels(pickup_station.cars, expected_start_riding_time)[available_cars_ids]
+            
             #finaly, get the list of cars that meet the consumption constraint 
-            car_index = findall(x -> x >= battery_level_needed, expected_battery_levels)
+            car_index = findfirst(expected_battery_levels .>= battery_level_needed)
 
-            if !isempty(car_index)
+            if !isnothing(car_index)
                 # here at least there is a car that meets the consumption constraint
-                selected_car_id = available_car_df.car_id[car_index[1]]
+                selected_car_id = pickup_station.cars.car_id[available_cars_ids[car_index]]
             end
         end
 
         #check if we could select a car from the pickup station
-        if selected_car_id == -1
+        if isnothing(selected_car_id)
             # the current path could not be used because we didn't find an available car for the trip
             continue # see the next path
         end
@@ -672,36 +774,27 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
         work_with_time_slot && trip_duration != Inf && (trip_duration = ceil(Int64, trip_duration / time_slot_length))
 
         expected_arrival_time = expected_start_riding_time + trip_duration
-        # first we group all the information in one Dataframe
-        parking_and_cars_df = leftjoin(drop_off_station.parking_places, drop_off_station.cars, on=:cars => :car_id, makeunique=true)
+        
+        #get an available parking slot
+        parking_place_id = findfirst(drop_off_station.parking_places.status .== P_FREE)
+        if isnothing(parking_place_id)
+            car_to_leave_id = findfirst(drop_off_station.cars.status .== CAR_RESERVED 
+                .&& drop_off_station.cars.start_reservation_time .<= expected_arrival_time
+                #= .&& drop_off_station.cars.pending_reservation .== 0 =#)
 
-        #get the available places
-        available_places_df = filter(row -> row.status == P_FREE ||
-                (!ismissing(row.status_1) && row.status_1 == CAR_RESERVED &&
-                 row.start_reservation_time <= expected_arrival_time
-                 && row.pending_reservation == 0),
-            parking_and_cars_df)
-
-
-        if !isempty(available_places_df)
-            # here we are sure that there is a place
-            immediately_free_parking_place = filter(row -> row.status == P_FREE, available_places_df)
-            if !isempty(immediately_free_parking_place)
-                # simply we select the first free place
-                parking_place_id = immediately_free_parking_place[1, :].p_id
+            if !isnothing(car_to_leave_id)
+                parking_place_id = findfirst(drop_off_station.parking_places.cars 
+                                                .== drop_off_station.cars.car_id[car_to_leave_id] .&&
+                                            drop_off_station.parking_places.pending_reservation .== 0)
             else
-                # or we select any place
-                parking_place_id = available_places_df[1, :].p_id
+                #the path can not be used because there is no available place
+                continue
             end
-        else
-            #the path can not be used because there is no available place
-            continue
         end
-        if pickup_station_id != -1 && drop_off_station_id != -1 && selected_car_id != -1 && parking_place_id != -1
-            # we need to memorize the selected requests in the online mode.
-            global online_selected_paths[scenario.scenario_id][path_id] = true
-            break
-        end
+
+        # we need to memorize the selected requests in the online mode.
+        global online_selected_paths[scenario.scenario_id][path_id] = true
+        break
     end
 
     return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
@@ -718,22 +811,21 @@ end
     outputs:
             Nothing
 """
-function book_trip(pickup_station, drop_off_station,pickup_station_id, drop_off_station_id, car_id,
+function book_trip(pickup_station, drop_off_station, pickup_station_id, drop_off_station_id, car_id,
     parking_place_id, start_trip_time, expected_arriving_time)
-    
     # get the car index inside the data frame
     car_indx = findfirst(pickup_station.cars.car_id .== car_id)
     
     if isnothing(car_indx)
         printstyled(stdout, "Error: We can not book the trip the selected car is not parked in the station\n", color=:light_red)
-        global failed = true
+        global failed[] = true
         return
     end
 
     #  reserve the car
     if pickup_station.cars.status[car_indx] == CAR_RESERVED
         printstyled(stdout, "Error: We can not book the trip the selected car is already reserved\n", color=:light_red)
-        global failed = true
+        global failed[] = true
         return
     end
 
@@ -750,18 +842,21 @@ function book_trip(pickup_station, drop_off_station,pickup_station_id, drop_off_
 
     # reserve the parking space
     #check if the parking place is occupied or resereved ( it will be free by the arriving time)
-    if drop_off_station.parking_places[parking_place_id, :].status in [P_OCCUPIED, P_RESERVED]
+    if drop_off_station.parking_places.status[parking_place_id] in [P_OCCUPIED, P_RESERVED]
         drop_off_station.parking_places.pending_reservation[parking_place_id] += 1
     else
         # the place is free so we reserved it directely
         drop_off_station.parking_places.status[parking_place_id] = P_RESERVED
     end
-    # change the status of the car and precise to the drop off station that it is in its way comming 
-    car = DataFrame(pickup_station.cars[car_indx, :]) # copy
-    car.expected_arrival_time[1] = expected_arriving_time
-    car.status[1] = CAR_ON_WAY
-    car.start_charging_time[1] = NaN
-    append!(drop_off_station.cars, car)
+    
+    push!(drop_off_station.cars, (pickup_station.cars.car_id[car_indx],
+            pickup_station.cars.car_type[car_indx],
+            CAR_ON_WAY, 
+            pickup_station.cars.last_battery_level[car_indx],
+            NaN, 
+            NaN,
+            0,
+            expected_arriving_time)) # copy
 end
 
 
@@ -806,6 +901,7 @@ function generate_random_solution(; open_stations_number=-1)
     # get the selected paths according to the FIFS policy
     old_online_serving_value = online_request_serving
 
+    save_sol(sol, "sol.jls")
     set_online_mode(true)
     E_carsharing_sim(sol)
     sol.selected_paths = deepcopy(online_selected_paths)

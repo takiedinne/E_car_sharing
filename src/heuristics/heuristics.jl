@@ -1,9 +1,9 @@
 export applyHeuristic
 
 global mutationHeuristics = [1, 2]
-global localSearchHeuristics = [3, 4, 5]
+global localSearchHeuristics = [3, 4, 5, 8]
 global ruinRecreateHeuristics = [6, 7]
-global crossoverHeuristics = [8]
+global crossoverHeuristics = [9]
 """ 
     this file implments the heuristics for the carsharing problem
     all the heuristic need to have the sam schema of input and output
@@ -33,7 +33,8 @@ function flipStationState(sol::Solution; mutation_number::Int64=1)
     
     global rng
     global online_request_serving
-    
+    global scenario_list
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
     # step1: copy the solution
     curr_sol = deepcopy(sol)
     
@@ -51,7 +52,7 @@ function flipStationState(sol::Solution; mutation_number::Int64=1)
             push!(opened_stations, st)
             
             # set the initial cars number to zero
-            init_cars_nbr = floor(stations[st].max_number_of_charging_points / 2)
+            init_cars_nbr = floor(stations_capacity[st] / 2)
             curr_sol.initial_cars_number[st] = init_cars_nbr
         else
             push!(closed_stations, st)
@@ -93,6 +94,8 @@ function interchangeStations(sol::Solution; mutation_number::Int64=1)
     # global variables
     global rng
     global online_request_serving
+    global scenario_list
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
 
     # step1: copy the solution
     curr_sol = deepcopy(sol)
@@ -112,7 +115,7 @@ function interchangeStations(sol::Solution; mutation_number::Int64=1)
     curr_sol.initial_cars_number[station_to_close] .= 0
     curr_sol.open_stations_state[station_to_open] .= true
     curr_sol.initial_cars_number[station_to_open] .= floor.(
-        [stations[st].max_number_of_charging_points for st in station_to_open] 
+        [stations_capacity[st] for st in station_to_open] 
         ./ 2)
 
     # step5: treat the selected_paths if we are in offline mode
@@ -144,6 +147,8 @@ end
 """
 function greedyAdding(sol::Solution; local_search_depth::Int64=4)
     global online_request_serving
+    global scenario_list
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
     
     #step1: copy the solution
     curr_sol = deepcopy(sol)
@@ -172,7 +177,7 @@ function greedyAdding(sol::Solution; local_search_depth::Int64=4)
             new_sol = deepcopy(curr_sol)
             # open the station
             new_sol.open_stations_state[closed_st] = true
-            new_sol.initial_cars_number[closed_st] = floor(stations[closed_st].max_number_of_charging_points / 2)
+            new_sol.initial_cars_number[closed_st] = floor(stations_capacity[closed_st] / 2)
             
             #evalute the new solution
             if !online_request_serving
@@ -206,8 +211,8 @@ function greedyAdding(sol::Solution; local_search_depth::Int64=4)
                 new_sol.open_stations_state[closed_st1] = true
                 new_sol.open_stations_state[closed_st2] = true
 
-                new_sol.initial_cars_number[closed_st1] = floor(stations[closed_st1].max_number_of_charging_points / 2)
-                new_sol.initial_cars_number[closed_st2] = floor(stations[closed_st2].max_number_of_charging_points / 2)
+                new_sol.initial_cars_number[closed_st1] = floor(stations_capacity[closed_st1] / 2)
+                new_sol.initial_cars_number[closed_st2] = floor(stations_capacity[closed_st2] / 2)
                 #evalute the new solution
                 if !online_request_serving
                     new_fit, _ = serve_requests_after_opening_station(new_sol, [closed_st1, closed_st2]) 
@@ -335,7 +340,9 @@ end
 function addCarsLS(sol::Solution; local_search_depth::Int64=1)
     #global information
     global online_request_serving
-
+    global scenario_list
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    
     #step1: copy the solution
     curr_sol = deepcopy(sol)
     curr_fit = E_carsharing_sim(curr_sol)
@@ -346,14 +353,13 @@ function addCarsLS(sol::Solution; local_search_depth::Int64=1)
     local_search_depth = min(local_search_depth, length(opened_stations))
 
     # see how can we enhance this heuristic by sorting the stations
-
     for _ in 1:local_search_depth
         find_better_solution = false
         for opened_st in opened_stations
             # save the current solution (useful to reset)
             new_sol = deepcopy(curr_sol)
             
-            station_capacity = stations[opened_st].max_number_of_charging_points
+            station_capacity = stations_capacity[opened_st]
             
             if new_sol.initial_cars_number[opened_st] >= station_capacity
                 continue # we cannot add more cars to this station so we skip it
@@ -367,6 +373,9 @@ function addCarsLS(sol::Solution; local_search_depth::Int64=1)
                 new_fit, _ = serve_requests_after_opening_station(new_sol, [opened_st])
             else
                 new_fit = E_carsharing_sim(new_sol)
+                if new_fit>1000
+                    save_sol(new_sol, "sol_error.jls")
+                end
             end
 
             if new_fit < curr_fit
@@ -386,6 +395,119 @@ function addCarsLS(sol::Solution; local_search_depth::Int64=1)
     return curr_fit, curr_sol
 end
 
+"""
+    greedySubtitution(sol::Solution; local_search_depth::Int64=1)
+
+    first improvement local search. it tries to subtitute an open station by a closed station, in a greedy manner
+    
+    @sol: the solution that we start the search from
+    @local_search_depth: the number of iteration for the local search
+
+    return the new fit and solution
+"""
+function greedySubtitution(sol::Solution; local_search_depth::Int64=1)
+    
+    global online_request_serving
+    global scenario_list
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    
+    #step1: copy the solution
+    curr_sol = deepcopy(sol)
+    curr_fit = E_carsharing_sim(curr_sol)
+    
+    #get the list of opened and closed stations 
+    opened_stations = findall(curr_sol.open_stations_state)
+    closed_stations = findall(.!curr_sol.open_stations_state)
+    
+    #make sure that the depth of search is less or equal to the number of opened stations
+    local_search_depth = min(local_search_depth, length(opened_stations), length(closed_stations))
+
+    #sort the stations by their number of requests
+    requests_to_loose_per_opened_station = [sum(
+                                        [nrow(get_trips_station(st,
+                                         scenario_list[i].feasible_paths[curr_sol.selected_paths[i], :])) 
+                                         for i in eachindex(scenario_list)])
+                                    for st in opened_stations]
+    requests_to_serve_per_closed_station = [sum(
+                                        [nrow(get_trips_station(st, scenario_list[i].feasible_paths)) 
+                                         for i in eachindex(scenario_list)])
+                                    for st in closed_stations]
+
+    opened_stations = opened_stations[sortperm(requests_to_loose_per_opened_station)]
+    closed_stations = closed_stations[sortperm(requests_to_serve_per_closed_station, rev=true)]
+    #step2: start the local search
+    stations_to_close = Int64[] # keep track of the closed stations
+    stations_to_open = Int64[] # keep track of the opened stations
+    
+    find_better_solution = false
+    
+    for _ in 1:local_search_depth
+        find_better_solution = false
+        
+        for (opened_st, closed_st) in Iterators.product(opened_stations, closed_stations)
+            
+            if opened_st in closed_stations || closed_st in opened_stations
+                continue
+            end
+
+            # save the current solution (useful to reset)
+            new_sol = deepcopy(curr_sol)
+            
+            # close the station
+            new_sol.open_stations_state[opened_st] = false
+            new_sol.initial_cars_number[opened_st] = 0
+
+            # open the station
+            new_sol.open_stations_state[closed_st] = true
+            new_sol.initial_cars_number[closed_st] = floor(stations_capacity[closed_st] / 2)
+            
+            #evalute the new solution
+            if !online_request_serving 
+                # get the requests that were served by the station
+                requests_served_by_station = [get_trips_station(opened_st, 
+                                                scenario_list[i].feasible_paths[curr_sol.selected_paths[i], :]).req 
+                                                for i in 1:length(scenario_list)]
+                #clean the selected paths
+                new_fit, _ = clean_up_selected_paths!(new_sol)
+
+                #try to serve the requests that were served by the station
+                if sum(x->length(x), requests_served_by_station) > 0
+                    new_fit, _, _ = serve_requests!(new_sol, requests_served_by_station)
+                end
+
+                # serve new requests after opening the new station
+                new_fit, _ = serve_requests_after_opening_station(new_sol, [closed_st])
+            else
+                new_fit = E_carsharing_sim(new_sol)
+            end
+
+            if new_fit < curr_fit
+                curr_sol = new_sol
+                curr_fit = new_fit
+                push!(stations_to_close, opened_st)
+                push!(stations_to_open, closed_st)
+
+                find_better_solution = true
+
+                break
+            end
+        end
+        
+        if !find_better_solution
+            #we couldn't enhance the solution by closing a station so we stop the local search
+            break
+        end
+    end 
+    if !find_better_solution
+        @info "we coundn' find solution by subtituting stations"
+    end
+     
+    sol.open_stations_state = deepcopy(curr_sol.open_stations_state)
+    sol.initial_cars_number = deepcopy(curr_sol.initial_cars_number)
+    sol.selected_paths = deepcopy(curr_sol.selected_paths)
+
+    return curr_fit, curr_sol  
+end
 """
     Ruin and recreate heuristics
     they perform on two phases: ruin where they dustruct the solution on hand 
@@ -408,6 +530,7 @@ function FIFSSelectedPaths(sol::Solution; ruin_recreate_depth::Int64=1)
     global rng
     global online_selected_paths # the selected paths that were used to serve the requests in the online mode
 
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
     #step1: copy the solution
     curr_sol = deepcopy(sol)
 
@@ -426,7 +549,7 @@ function FIFSSelectedPaths(sol::Solution; ruin_recreate_depth::Int64=1)
     stations_to_open = sample(rng, closed_stations, ruin_recreate_depth, replace=false)
     curr_sol.open_stations_state[stations_to_open] .= true
     curr_sol.initial_cars_number[stations_to_open] .= floor.(
-        [stations[st].max_number_of_charging_points for st in stations_to_open] 
+        [stations_capacity[st] for st in stations_to_open] 
         ./ 2)
 
     #step4: recreate phase (handle the selected_paths)
@@ -452,7 +575,8 @@ function greedyRuinRecreate(sol::Solution; ruin_recreate_depth::Int64=1)
     # global variables
     global online_request_serving
     global rng
-
+    global scenario_list
+    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
     #step1: copy the solution
     curr_sol = deepcopy(sol)
 
@@ -482,7 +606,7 @@ function greedyRuinRecreate(sol::Solution; ruin_recreate_depth::Int64=1)
     stations_to_open = closed_stations[1:ruin_recreate_depth]
     curr_sol.open_stations_state[stations_to_open] .= true
     curr_sol.initial_cars_number[stations_to_open] .= floor.(
-                            [stations[st].max_number_of_charging_points for st in stations_to_open] 
+                            [stations_capacity[st] for st in stations_to_open] 
                             ./ 2)
     #handle the selected paths
     if !online_request_serving
@@ -552,6 +676,8 @@ function applyHeuristic(heurId::Int64, sol::Solution, mutation_num::Int64, depth
         fit, new_sol = FIFSSelectedPaths(sol, ruin_recreate_depth=mutation_num)
     elseif heurId == 7
         fit, new_sol = greedyRuinRecreate(sol, ruin_recreate_depth=mutation_num)
+    elseif heurId == 8
+        fit, new_sol = greedySubtitution(sol, local_search_depth=depth_of_search)
     else
         error("heuristic id must be in $(mutationHeuristics) ∪ $(localSearchHeuristics) ∪ $(ruinRecreateHeuristics)")
     end
@@ -560,7 +686,7 @@ end
 
 function applyHeuristic(heurId::Int64, sol1::Solution, sol2::Solution)
     
-    if heurId == 8
+    if heurId == 9
         return oneXCrossover(sol1, sol2)
     else
         error("heuristic id must be in $(crossoverHeuristics)")

@@ -5,5 +5,10 @@ using BenchmarkTools
 
 e.initialize_scenarios(collect(1:200));
 
-sol = generate_random_solution();
+sol = e.load_sol("sol.jls")
+E_carsharing_sim(sol)
+curr_fit, curr_sol = e.addCarsLS(sol, local_search_depth = 4)
+
+sol = e.load_sol("sol_error.jls")
+
 E_carsharing_sim(sol)
