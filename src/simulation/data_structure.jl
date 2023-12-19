@@ -57,9 +57,13 @@ mutable struct Solution
     initial_cars_number::Array{Int64, 1}
     selected_paths::Array{Array{Bool,1}, 1}
 end
-Solution() = Solution(falses(length(get_potential_locations())), zeros(length(get_potential_locations())), []) 
-
-
+Solution() = begin
+    stations_states = falses(length(get_potential_locations()))
+    initial_number_of_cars = zeros(length(get_potential_locations()))
+    selected_paths = (!online_request_serving && length(scenario_list) > 0 ) ? 
+        [falses(nrow(sc.feasible_paths)) for sc in scenario_list] : []
+    Solution(stations_states, initial_number_of_cars, selected_paths) 
+end
 
 mutable struct Scenario
     scenario_id::Int64

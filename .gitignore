@@ -10,3 +10,5 @@ Data/Instances/*
 Data/other/*
 Data/MIP/*
 results/*
+test.jl
+Scenario_analysis/*

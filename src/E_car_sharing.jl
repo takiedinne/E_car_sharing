@@ -22,8 +22,9 @@ using Serialization
 using BenchmarkTools
 
 using SparseArrayKit
-#= using GraphMakie
-using GLMakie =#
+
+using GraphMakie
+using GLMakie
 
 using StatsPlots
 using Random

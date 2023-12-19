@@ -724,7 +724,7 @@ function serve_requests_after_opening_station(sol::Solution, stations_idx::Array
     stations_to_increment_cars = Int64[]
 
     #loop over each scenario and try to serve new requests
-    @threads for sc_id in eachindex(scenario_list)
+    for sc_id in eachindex(scenario_list)
         #sc_id = 1
         scenario = scenario_list[sc_id] # handle one scenario a time
 
@@ -796,9 +796,9 @@ function can_use_trip(sc_id::Int64, trip::DataFrameRow, sol::Solution)
     trip_destination_station = trip.destination_station
 
     initial_car_origin_station = sol.initial_cars_number[findfirst(get_potential_locations() .== trip_origin_station)]
-    origin_station_capacity = stations[findfirst(get_potential_locations() .== trip_origin_station)].max_number_of_charging_points
+    origin_station_capacity = stations_capacity[findfirst(get_potential_locations() .== trip_origin_station)]
     initial_car_destination_station = sol.initial_cars_number[findfirst(get_potential_locations() .== trip_destination_station)]
-    destination_station_capacity = stations[findfirst(get_potential_locations() .== trip_destination_station)].max_number_of_charging_points
+    destination_station_capacity = stations_capacity[findfirst(get_potential_locations() .== trip_destination_station)]
 
     #get all the trips involving the origin station and add the new trips and sort them
     origin_station_trips = filter(row -> row.destination_station == trip_origin_station ||
@@ -1241,4 +1241,55 @@ function serve_requests_old!(sol::Solution, requests_list::Vector{Vector{Int64}}
     end
     #return the new objective function
     E_carsharing_sim(sol), sol.selected_paths, stations_to_increment_cars
+end
+
+
+function greedyCreation(;station_nbr_to_open = 70)
+    global stations_capacity #variable to store the capacity of stations
+
+    reqs_per_station = DataFrame(station_node = Int[], nbr_requests_start = Int[], nbr_requests_end = Int[])
+
+    # for each stations see the number of requests that are with in the walking time 
+    for st in eachindex(get_potential_locations())
+        #get the station node and the number of requests where each station intervened
+        station_node = get_potential_locations()[st]
+        nbr_requests_start = 0
+        nbr_requests_end = 0
+        for sc in eachindex(scenario_list)
+            
+            for request in eachrow(scenario_list[sc].request_list)
+                walking_time_origin = get_walking_time(request.ON, station_node, unit="minutes")
+                walking_time_destination = get_walking_time(request.DN, station_node, unit="minutes")
+                if walking_time_origin <= maximum_walking_time
+                    nbr_requests_start += 1
+                end
+                if walking_time_destination <= maximum_walking_time
+                    nbr_requests_end += 1
+                end
+            end
+        end
+        push!(reqs_per_station, (station_node, nbr_requests_start, nbr_requests_end))
+    end
+
+    reqs_per_station.total_req_nbr = reqs_per_station.nbr_requests_start .+ reqs_per_station.nbr_requests_end
+    reqs_per_station.ratio = reqs_per_station.nbr_requests_start ./ reqs_per_station.nbr_requests_end
+    
+    sorted_stations_ids = sortperm(reqs_per_station, [:total_req_nbr], rev=true)
+
+    sol = Solution()
+    sol.open_stations_state[sorted_stations_ids[1:station_nbr_to_open]] .= true
+
+
+    #deploy cars in the stations
+    for st in eachindex(sol.open_stations_state)
+        if sol.open_stations_state[st] #if open ?
+            car = min(stations_capacity[st] , floor(stations_capacity[st] * reqs_per_station.ratio[st]))
+            sol.initial_cars_number[st] = car
+            # @info stations_capacity[st] , car
+        end
+    end
+
+    serve_requests_after_opening_station(sol, sorted_stations_ids[1:station_nbr_to_open])
+    
+    sol
 end
