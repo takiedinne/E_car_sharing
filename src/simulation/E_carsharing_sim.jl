@@ -124,10 +124,10 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
         # count the objective function
         print_simulation && println("counting the objective function")
         
-        total_cars_cost = sum([vehicle_specific_values[ct][:car_cost] for ct in 
+        total_cars_cost = sum(Float64[vehicle_specific_values[ct][:car_cost] for ct in 
                                 vcat([scenario.stations[st].cars.car_type for st in findall(sol.open_stations_state)]...)])
         
-        total_station_cost = sum([station.charging_station_base_cost +
+        total_station_cost = sum(Float64[station.charging_station_base_cost +
                                   station.max_number_of_charging_points * station.charging_point_cost_fast
                                   for station in scenario.stations[sol.open_stations_state]])
                                     
@@ -234,7 +234,7 @@ function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_sce
     #global variables
     global scenarios_paths
     global number_of_requests_per_scenario
-
+    
     if !isnothing(nbr_requests_per_scenario)
         number_of_requests_per_scenario = nbr_requests_per_scenario
     end
@@ -901,7 +901,6 @@ function generate_random_solution(; open_stations_number=-1)
     # get the selected paths according to the FIFS policy
     old_online_serving_value = online_request_serving
 
-    save_sol(sol, "sol.jls")
     set_online_mode(true)
     E_carsharing_sim(sol)
     sol.selected_paths = deepcopy(online_selected_paths)

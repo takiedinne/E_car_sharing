@@ -34,7 +34,7 @@ function flipStationState(sol::Solution; mutation_number::Int64=1)
     global rng
     global online_request_serving
     global scenario_list
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    global stations_capacity
     # step1: copy the solution
     curr_sol = deepcopy(sol)
     
@@ -95,7 +95,7 @@ function interchangeStations(sol::Solution; mutation_number::Int64=1)
     global rng
     global online_request_serving
     global scenario_list
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    global stations_capacity 
 
     # step1: copy the solution
     curr_sol = deepcopy(sol)
@@ -148,7 +148,7 @@ end
 function greedyAdding(sol::Solution; local_search_depth::Int64=4)
     global online_request_serving
     global scenario_list
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    global stations_capacity
     
     #step1: copy the solution
     curr_sol = deepcopy(sol)
@@ -341,7 +341,7 @@ function addCarsLS(sol::Solution; local_search_depth::Int64=1)
     #global information
     global online_request_serving
     global scenario_list
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    global stations_capacity
     
     #step1: copy the solution
     curr_sol = deepcopy(sol)
@@ -409,7 +409,7 @@ function greedySubtitution(sol::Solution; local_search_depth::Int64=1)
     
     global online_request_serving
     global scenario_list
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    global stations_capacity
     
     #step1: copy the solution
     curr_sol = deepcopy(sol)
@@ -529,8 +529,8 @@ function FIFSSelectedPaths(sol::Solution; ruin_recreate_depth::Int64=1)
     global online_request_serving
     global rng
     global online_selected_paths # the selected paths that were used to serve the requests in the online mode
+    global stations_capacity
 
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
     #step1: copy the solution
     curr_sol = deepcopy(sol)
 
@@ -576,7 +576,7 @@ function greedyRuinRecreate(sol::Solution; ruin_recreate_depth::Int64=1)
     global online_request_serving
     global rng
     global scenario_list
-    stations_capacity = [station.max_number_of_charging_points for station in scenario_list[1].stations]
+    global stations_capacity
     #step1: copy the solution
     curr_sol = deepcopy(sol)
 
