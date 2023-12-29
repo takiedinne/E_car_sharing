@@ -509,7 +509,7 @@ function preprocessing_experiment2019()
 end
 
 
-function solve_single_scenario()
+function solve_single_scenario_using_gurobi()
     #list of parameters
     scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     walking_time_list = [5, 10, 15]
@@ -551,7 +551,6 @@ function solve_single_scenario()
         if obj == Inf
             push!(results_as_df, [ns, nr, wt, obj, missing, missing, cpu_time, TT])
         else
-            empty!(results_as_df)
             push!(results_as_df, [sc_id, wt, obj, sum(sol.open_stations_state), sum([sum(sol.selected_paths[i]) for i in eachindex(scenarios)]), cpu_time, TT, solver_ter_state])
             
             #save the sol file
@@ -560,4 +559,86 @@ function solve_single_scenario()
     end
     CSV.write(results_save_path, results_as_df)
     results_as_df
+end
+
+
+function solve_single_scenario_using_SA()
+    #list of parameters
+    scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    walking_time_list = [5, 10, 15]
+    
+    trial_nbr = 3
+    
+
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/solve_single_scenario_with_SA")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+    
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment,"/single_scenario_SA_", now(), ".csv")
+    
+    # parameters for the experiments    
+    results_as_df = DataFrame(S_id=Int64[], β_w=[], SA_Obj=[], J_bar=Int64[], K_bar=Int64[], total_time =[])
+    
+    for (sc_id, wt) in Iterators.product(scenario_list, walking_time_list)
+        
+        @info "[Ci MIP experiment 2019]: scenario N° $sc_id walking time = $wt"
+                
+        #set the  global variables 
+        global maximum_walking_time = wt
+        for _ in 1:trial_nbr
+            TT = @elapsed begin
+                #prepare the scenarios
+                #@info "inititialize scenarios ..."
+                scenarios = initialize_scenarios([sc_id])
+
+                # solve using MIP solver 
+                #@info "solving the scenarios ..."
+                sol = generate_random_solution()
+                sol, obj = simulated_annealing(sol, 1000., 1., 0.95, 100)
+            end 
+            #save the results
+            push!(results_as_df, [sc_id, wt, obj, sum(sol.open_stations_state), sum([sum(sol.selected_paths[i]) for i in eachindex(scenarios)]), TT])
+        end
+    end
+    
+    CSV.write(results_save_path, results_as_df)
+    results_as_df
+end
+
+function SA_params()
+    T_list = [100., 200., 300., 600., 800., 1000.]
+    T0_list = [0.1, 1, 10]
+    α_list = [0.95, 0.98, 0.99, 0.998]
+    I_list = [10, 50, 100, 200, 500, 1000]
+    β_list = [0.3, .5, .7]
+
+    trial_nbr = 5
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/SA_params")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+    
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment,"/SA_params", now(), ".csv")
+    
+    #parameters for the experiments    
+    df = DataFrame(T=Float64[], T0=Float64[], α=Float64[], I=Float64[], β=Float64[], SA_Obj=Float64[], total_time =Float64[])
+    CSV.write(results_save_path, df#= , append = true =#)
+    #prepare the scenarios
+    #@info "inititialize scenarios ..."
+    initialize_scenarios([1])
+    
+    starting_sols = [generate_random_solution() for _ in 1:trial_nbr]
+    for (T, T0, α, I, β) in Iterators.product(T_list, T0_list, α_list, I_list, β_list)
+        @info "T = $T, T0 = $T0, α = $α, I = $I, β = $β"
+        
+        fit = 0.
+        TT = @elapsed for i in 1:trial_nbr
+            sol, obj = simulated_annealing(starting_sols[i], T, T0, α, I, β)
+            fit += obj
+        end
+        empty!(df)
+        push!(df, [T, T0, α, I, β, fit/trial_nbr, TT/trial_nbr])
+        CSV.write(results_save_path, df, append = true)
+    end
 end

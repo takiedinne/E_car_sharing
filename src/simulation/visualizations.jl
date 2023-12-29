@@ -52,16 +52,16 @@ function plot_stations(;g=manhaten_city_driving_graph, ax::Union{Nothing, Axis}=
     nhover = NodeHoverHandler(node_hover_action)
     register_interaction!(ax, :nhover, nhover)
 
-    return  ax, stations_graph
+    return  f, p, ax, stations_graph
 end
 
 
 function plot_solution(sol::Solution; optimal_sol::Union{Nothing, Solution}=nothing)
     
-    optimal_sol = load_sol("Data/other/scenario_1_to_10_opt_sol.jls")
+    optimal_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_1_requests_1000_walking_time_5.jls")
     
-    f, ax, p, g = plot_stations()
-     # change the colore of the stations
+    f, p, ax, g = plot_stations()
+    # change the colore of the stations
     # green the selected stations and black the register_interaction
     node_color = [sol.open_stations_state[i] ? :red : :black for i in 1:nv(g)]
     if !isnothing(optimal_sol)
@@ -127,6 +127,7 @@ function plot_solution(sol::Solution; optimal_sol::Union{Nothing, Solution}=noth
         patchsize = (35, 35), rowgap = 10)
 
    
+    display(GLMakie.Screen(), f)
 end
 
 """
