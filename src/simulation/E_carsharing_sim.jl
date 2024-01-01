@@ -927,6 +927,6 @@ function ECS_objective_function(sol::Solution)
     revenues_as_list = Vector{Vector{Float64}}([scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :Rev] for scenario in scenario_list])
     revenues = sum(vcat(revenues_as_list ...))
     
-    return -1 * (revenues - (total_cars_cost + total_station_cost) / cost_factor)
+    return -1 * (revenues / length(scenario_list) - (total_cars_cost + total_station_cost) / cost_factor)
 end
 
