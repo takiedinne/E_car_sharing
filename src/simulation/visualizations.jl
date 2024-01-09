@@ -58,7 +58,7 @@ end
 
 function plot_solution(sol::Solution; optimal_sol::Union{Nothing, Solution}=nothing)
     
-    optimal_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_1_requests_1000_walking_time_5.jls")
+    optimal_sol = load_sol("Data/other/scenario_1_to_10_opt_sol.jls")
     
     f, p, ax, g = plot_stations()
     # change the colore of the stations

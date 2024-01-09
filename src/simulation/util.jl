@@ -568,3 +568,33 @@ function load_sol(path::String)
     sol = deserialize(path)
     sol
 end
+
+function get_station_selected_trips(sol::Solution, station_id::Int64)
+    global scenario_list 
+    station_node_id = get_potential_locations()[station_id]
+    station_trips = [filter(x -> x.origin_station == station_node_id ||
+                         x.destination_station == station_node_id ,
+                         scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
+                         for scenario in scenario_list]
+                         
+    for i in eachindex(scenario_list)
+        station_trips[i].scenario_id = i .* ones(Int, nrow(station_trips[i]))
+    end
+
+    return vcat(station_trips ...)
+end
+
+function get_station_feasible_trips(station_id::Int64)
+    global scenario_list 
+    station_node_id = get_potential_locations()[station_id]
+    station_trips = [filter(x -> x.origin_station == station_node_id ||
+                         x.destination_station == station_node_id ,
+                         scenario.feasible_paths)
+                         for scenario in scenario_list]
+                         
+    for i in eachindex(scenario_list)
+        station_trips[i].scenario_id = i .* ones(Int, nrow(station_trips[i]))
+    end
+
+    return vcat(station_trips ...)
+end
