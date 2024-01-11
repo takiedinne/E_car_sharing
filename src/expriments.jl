@@ -607,16 +607,17 @@ function solve_single_scenario_using_SA()
 end
 
 function SA_params()
-    T_list = [100., 200., 300., 600., 800., 1000.]
-    T0_list = [0.1, 1, 10]
-    α_list = [#= 0.95, 0.98,  =#0.99#= , 0.998 =#]
-    I_list = [#= 10, =# 50#= , 100, 200, 500, 1000 =#]
+    T_list = Float64[#= 100., 200.,  =#300.0 #= , 600., 800., 1000. =#]
+    T0_list = Float64[#= 0.1, 1,  =#10]
+    α_list = [#= 0.95,  =#0.98#= , 0.99, 0.998 =#]
+    I_list = collect(10:2:200)
     β_list = [.5]
-    seeds = [1234, 125, 129]
+    
+    main_seed = 1905
 
     trial_nbr = 3
     # the folder where the results will be stored
-    result_folder_for_this_experiment = string(results_folder, "/SA_params")
+    result_folder_for_this_experiment = string(results_folder, "/SA_params/I")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
     
     #the result file
@@ -632,11 +633,11 @@ function SA_params()
     starting_sols = [generate_random_solution() for _ in 1:trial_nbr]
     for (T, T0, α, I, β) in Iterators.product(T_list, T0_list, α_list, I_list, β_list)
         @info "T = $T, T0 = $T0, α = $α, I = $I, β = $β"
-       
+        T, T0, α, I, β = 200., 10., 0.98, 100, 0.5
         fit = 0.
         TT = @elapsed for i in 1:trial_nbr
-            rng = MersenneTwister(seeds[i])
-            sol, obj = simulated_annealing(starting_sols[i], T, T0, α, I, β)
+            rng = MersenneTwister(main_seed + i)
+            sol, obj, _= simulated_annealing(starting_sols[i], T, T0, α, I, β)
             fit += obj
         end
         empty!(df)

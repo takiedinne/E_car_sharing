@@ -12,3 +12,4 @@ Data/MIP/*
 results/*
 test.jl
 Scenario_analysis/*
+sols/*

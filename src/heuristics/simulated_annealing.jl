@@ -1,7 +1,6 @@
 export simulated_annealing
 
 global request_feasible_trips_ids = [] #to get feasible trips for req i on scenario s : request_feasible_trips_ids[s][i]
-global greedy_param = 0.0
 
 function set_trips_to_requets_var()
     global request_feasible_trips_ids = []
@@ -16,9 +15,13 @@ function set_trips_to_requets_var()
 end
 
 function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, τˢ::Float64=0.1, α::Float64=0.9998, Ι::Int64=1775, β::Float64=0.5)
-   
+    #global rng = MersenneTwister(1234)
+    
     sa_start_time = time()
-    set_trips_to_requets_var()
+
+    if isempty(request_feasible_trips_ids) || length(request_feasible_trips_ids) != length(scenario_list) 
+        set_trips_to_requets_var()
+    end
 
     total_tried = 0
     total_accepted = 0
@@ -33,8 +36,10 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
             #clean_up_cars_number!(neighbor_solution)
             neighbor_cost = ECS_objective_function(neighbor_solution)
             #= fit = E_carsharing_sim(neighbor_solution)
+            
             if fit != neighbor_cost
                 println("fit: $fit, neighbor_cost: $neighbor_cost")
+                τ = 0
                 break
             end =#
 
@@ -56,11 +61,12 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
                 end
 
             end
+
         end
         τ *= α
         #@info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
     end
-    @info "best_cost = $best_cost, time = $( time() - sa_start_time), $total_accepted out of $total_tried"
+    #@info "best_cost = $best_cost, gap = $(round((best_cost + 26817.4 )/ 268.174, digits=2))% time = $( time() - sa_start_time), $total_accepted out of $total_tried"
     return best_solution, best_cost, ( time() - sa_start_time)
 end
 
@@ -103,7 +109,7 @@ function open_station_neighborhood(sol::Solution)
         neigh_sol.initial_cars_number[station_to_open] = floor(stations_capacity[station_to_open] / 2)
     else
         #in offline mode we need to serve new requests
-        serve_new_requests_new!(neigh_sol, scenario_list, station_to_open)
+        serve_new_requests!(neigh_sol, scenario_list, station_to_open)
     end
 
     return neigh_sol
@@ -144,53 +150,76 @@ end
 
 ##### Utils functions #####
 function serve_new_requests!(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
-    #sol, station_id = load_sol("sol_error.jls"), 43;
-    #sol.open_stations_state[station_id] = true
+    
     global stations_capacity
     global request_feasible_trips_ids
     global locations_dict
+    
     station_node_id = get_potential_locations()[station_id]
 
-    for scenario in scenario_list
-        # scenario = scenario_list[1]
-        #step 1 : get the list of trips where station intervenes as a pickup station or a dropoff station
-        trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id, scenario.feasible_paths)
+    # Step 1: get all the trips for all the scenario where station intervene
+    trips = [filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
+        scenario.feasible_paths) for scenario in scenario_list]
+    for sc_id in eachindex(trips)
+        trips[sc_id].scenario_id = ones(Int, nrow(trips[sc_id])) .* sc_id
+    end
+    trips = vcat(trips...)
+
+    requests_list = unique(trips, [:req, :scenario_id])
+    sort!(requests_list, [:scenario_id, :Rev], rev=[false, true])
+    #shuffle!(requests_list)
+    
+    for req in eachrow(requests_list)
+        # req = requests_list[3,:]
+        # check if the requests is not served yet
+        is_served = !isnothing(findfirst(sol.selected_paths[req.scenario_id][request_feasible_trips_ids[req.scenario_id][req.req]]))
+        if is_served
+            #the trip is already served
+            continue
+        end
+
+        #check if the request can be served from the station id
+        station_can_serve, station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, station_id, req)
+
+        if !station_can_serve
+            continue
+        end
         
-        #step 2 : order the trips by their revenue
-        sort!(trips, [:Rev], rev=true)
+        #the request is not served yet
+        #get the trips of the request
+        req_trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
+            scenario_list[req.scenario_id].feasible_paths[request_feasible_trips_ids[req.scenario_id][req.req], :])
 
-        for trip in eachrow(trips)
-            # trip = trips[6,:]
-            # check if the requests is not served yet
-            is_served = !isnothing(findfirst(sol.selected_paths[scenario.scenario_id][request_feasible_trips_ids[scenario.scenario_id][trip.req]]))
-            if is_served
-                #the trip is already served
-                continue
-            end
 
-            #the request is not served yet
-            destination_station_id = locations_dict[trip.destination_station]
-            origin_station_id = locations_dict[trip.origin_station]
-            #check if we can serve the trip
-            #origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario, sol, origin_station_id, trip)
-            origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, origin_station_id, trip)
-            if origin_can_serve
-                des_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, destination_station_id, trip)
+        other_stations = locations_dict[req_trips.origin_station[1]] == station_id ?
+                                            [locations_dict[x] for x in req_trips.destination_station] : 
+                                            [locations_dict[x] for x in req_trips.origin_station]
 
-                if des_can_serve
-                    #here we are sure that we can serve the trip
-                    sol.initial_cars_number[origin_station_id] = origin_new_cars
-                    sol.initial_cars_number[destination_station_id] = destination_new_cars
-
-                    sol.selected_paths[scenario.scenario_id][trip.fp_id] = true # we can serve the trip
-                    #@info "we can serve the trip $(trip.fp_id)"
-                end
+        #get_other stations_bounds to privilege the less ristricted stations
+        #=other_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, other_stations[i]) for i in eachindex(other_stations)]
+        
+         other_station_order = sortperm([other_stations_bounds[i][2] #= upper =# - 
+                                        other_stations_bounds[i][1] #= upper =# 
+                                        for i in eachindex(other_stations)], rev=true) =#
+        other_station_order = collect(1:length(other_stations))
+        #check if we can serve the trip
+        for i in other_station_order
+            # i = other_station_order[1] locations_dict[i]
+            trip = req_trips[i,:]
+            other_station_id = other_stations[i]
+            other_station_can_serve, other_station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, other_station_id, trip)
+            
+            if other_station_can_serve
+                #here we are sure that we can serve the trip
+                sol.initial_cars_number[station_id] = station_new_cars
+                sol.initial_cars_number[other_station_id] = other_station_new_cars
+                sol.selected_paths[req.scenario_id][trip.fp_id] = true # we can serve the trip
+                break
             end
 
         end
 
     end
-
 end
 
 function clean_up_trips!(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
@@ -270,6 +299,76 @@ function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64)
     return stations_to_recheck, requests_to_unserve
 end
 
+function assigne_requests!(sol::Solution, scenario_list::Array{Scenario,1}, requests_list::Vector{Vector{Int64}})
+   
+    #step 1: order all the requests by their revenue
+    requests_list_df = vcat([DataFrame(reqId=requests_list[sc_id],
+        Rev=scenario_list[sc_id].request_list.Rev[requests_list[sc_id]],
+        scenario_id=ones(Int, length(requests_list[sc_id])) .* sc_id)
+                             for sc_id in eachindex(scenario_list)]...)
+    
+    sort!(requests_list_df, [:scenario_id, :Rev], rev=[false, true])
+    
+    #loop over the requests
+    for req in eachrow(requests_list_df)
+        #req = requests_list_df[3, :]
+        #get the feasible trips for the current request
+        #curr_req_feasible_trips = filter(x -> x.req == req.reqId, scenario_list[req.scenario_id].feasible_paths)
+        curr_req_feasible_trips = scenario_list[req.scenario_id].
+                                        feasible_paths[request_feasible_trips_ids[req.scenario_id][req.reqId], :]
+        
+        origin_stations_ids = unique([locations_dict[x] for x in curr_req_feasible_trips.origin_station])
+        destination_stations_ids = unique([locations_dict[x] for x in curr_req_feasible_trips.destination_station])
+        # sort the station to less restrictive first
+        #origin_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in origin_stations_ids]
+        #destination_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in destination_stations_ids]
+        
+        #= origin_station_order = sortperm([origin_stations_bounds[i][2] - #= upper =#
+                                         origin_stations_bounds[i][1] #= upper =#
+                                         for i in eachindex(origin_stations_bounds)], rev=true) =#
+
+        #= destination_station_order = sortperm([destination_stations_bounds[i][2] - #= upper =#
+                                              destination_stations_bounds[i][1] #= upper =#
+                                              for i in eachindex(destination_stations_bounds)], rev=true) =#
+
+        # no sorting strategy for now
+        origin_station_order = collect(1:length(origin_stations_ids))
+        destination_station_order = collect(1:length(destination_stations_ids))
+        origin_can_serve, des_can_serve = false, false
+        
+        for o_id in origin_stations_ids[origin_station_order]
+            #o_id = origin_stations_ids[3]
+            origin_trips = filter(x-> x.origin_station == get_potential_locations()[o_id], curr_req_feasible_trips)
+            origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, o_id, origin_trips[1, :])
+            
+            if !origin_can_serve
+                continue
+            end
+
+            for d_id in destination_stations_ids[destination_station_order]
+                trips = filter(x-> x.destination_station == get_potential_locations()[d_id], origin_trips)
+                if isempty(trips)
+                    continue
+                end
+                trip = trips[1,:]
+                des_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, d_id, trip)
+                
+                if !des_can_serve
+                    continue
+                end
+
+                sol.initial_cars_number[o_id] = origin_new_cars
+                sol.initial_cars_number[d_id] = destination_new_cars
+
+                sol.selected_paths[req.scenario_id][trip.fp_id] = true # we can serve the trip
+                break # we skip all the other trips of the request 
+            end
+
+            #here we served the request so no need to check the other origin stations
+            origin_can_serve && des_can_serve && break
+        end
+    end
+end
 
 function correct_station_trips(scenario::Scenario, station_id::Int64, sol::Solution, initial_number_of_cars)
 
@@ -308,41 +407,6 @@ function correct_station_trips(scenario::Scenario, station_id::Int64, sol::Solut
     end
 
     return stations_to_recheck, requests_to_unserve
-end
-
-function assigne_requests!(sol::Solution, scenario_list::Array{Scenario,1}, requests_list::Vector{Vector{Int64}})
-    for sc_id in eachindex(scenario_list)
-        scenario = scenario_list[sc_id]
-        #loop over the requests
-        for req_id in requests_list[sc_id]
-            # req_id = requests_list[sc_id][2]
-            #get the feasible trips for the current request
-            curr_req_feasible_trips = filter(x -> x.req == req_id, scenario.feasible_paths)
-
-            for trip in eachrow(curr_req_feasible_trips)
-                #trip = curr_req_feasible_trips[2,:]
-                origin_station_id = locations_dict[trip.origin_station]
-                destination_station_id = locations_dict[trip.destination_station]
-
-                origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, origin_station_id, trip)
-
-                if origin_can_serve
-                    des_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, destination_station_id, trip)
-
-                    if des_can_serve
-                        #here we are sure that we can serve the trip
-                        sol.initial_cars_number[origin_station_id] = origin_new_cars
-                        sol.initial_cars_number[destination_station_id] = destination_new_cars
-
-                        sol.selected_paths[scenario.scenario_id][trip.fp_id] = true # we can serve the trip
-                        break # we skip all the other trips of the request 
-                    end
-                end
-
-            end
-        end
-
-    end
 end
 
 function get_station_cars_bounds(scenario::Scenario, sol::Solution, station_id::Int64)
@@ -407,119 +471,6 @@ function can_serve_and_get_cars_number(scenario_list::Vector{Scenario}, scenario
     sol.selected_paths[scenario_id][trip.fp_id] = false
     return (true, overall_bound[1])
 end
-"""
-    serve new requests and we order the scenarios according to station_id bounds
-    it privilige the less ristricted stations.
-"""
-function serve_new_requests_new!(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
-    #sol, station_id = load_sol("sol.jls"), 77
-    global stations_capacity
-    global request_feasible_trips_ids
-    global locations_dict
-    
-    station_node_id = get_potential_locations()[station_id]
-
-    # Step 1: get all the trips for all the scenario where station intervene
-    trips = [filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
-        scenario.feasible_paths) for scenario in scenario_list]
-    for sc_id in eachindex(trips)
-        trips[sc_id].scenario_id = ones(Int, nrow(trips[sc_id])) .* sc_id
-    end
-    trips = vcat(trips...)
-
-    requests_list = unique(trips, [:req, :scenario_id])
-    sort!(requests_list, [:Rev], rev=true)
-
-    for req in eachrow(requests_list)
-        # req = requests_list[1,:]
-        # check if the requests is not served yet
-        is_served = !isnothing(findfirst(sol.selected_paths[req.scenario_id][request_feasible_trips_ids[req.scenario_id][req.req]]))
-        if is_served
-            #the trip is already served
-            continue
-        end
-
-        #check if the request can be served from the station id
-        station_can_serve, station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, station_id, req)
-
-        if !station_can_serve
-            continue
-        end
-        
-        #the request is not served yet
-        #get the trips of the request
-        req_trips = trips[trips.scenario_id .== req.scenario_id .&& trips.req .== req.req, :]
-        
-        other_stations = locations_dict[req_trips.origin_station[1]] == station_id ?
-                                            [locations_dict[x] for x in req_trips.destination_station] : 
-                                            [locations_dict[x] for x in req_trips.origin_station]
-
-        #get_other stations_bounds to privilege the less ristricted stations
-        other_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, other_stations[i]) for i in eachindex(other_stations)]
-        other_station_order = sortperm([other_stations_bounds[i][2] #= upper =# - 
-                                        other_stations_bounds[i][1] #= upper =# 
-                                        for i in eachindex(other_stations)]) 
-        
-        #check if we can serve the trip
-        for i in other_station_order
-            # i = 1
-            trip = req_trips[i,:]
-            other_station_id = other_stations[i]
-            other_station_can_serve, other_station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, other_station_id, trip)
-            
-            if other_station_can_serve
-                #here we are sure that we can serve the trip
-                sol.initial_cars_number[station_id] = station_new_cars
-                sol.initial_cars_number[other_station_id] = other_station_new_cars
-                sol.selected_paths[req.scenario_id][trip.fp_id] = true # we can serve the trip
-                break
-            end
-
-        end
-        
-    end
-end
-
-function assigne_requests_new!(sol::Solution, scenario_list::Array{Scenario,1}, requests_list::Vector{Vector{Int64}})
-    global greedy_param
-    #step 1: order all the requests by their revenue
-    requests_list_df = vcat([DataFrame(reqId=requests_list[sc_id],
-        Rev=scenario_list[sc_id].request_list.Rev[requests_list[sc_id]],
-        scenario_id=ones(Int, length(requests_list[sc_id])) .* sc_id)
-                             for sc_id in eachindex(scenario_list)]...)
-    
-                    
-    if rand(rng) > greedy_param
-        shuffle!(requests_list_df)
-    else
-        sort!(requests_list_df, [:Rev], rev=true)
-    end
-    #loop over the requests
-    for req in eachrow(requests_list_df)
-        #get the feasible trips for the current request
-        curr_req_feasible_trips = filter(x -> x.req == req.reqId, scenario_list[req.scenario_id].feasible_paths)
-        for trip in eachrow(curr_req_feasible_trips)
-            #trip = curr_req_feasible_trips[2,:]
-            origin_station_id = locations_dict[trip.origin_station]
-            destination_station_id = locations_dict[trip.destination_station]
-
-            origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, origin_station_id, trip)
-
-            if origin_can_serve
-                des_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, destination_station_id, trip)
-
-                if des_can_serve
-                    #here we are sure that we can serve the trip
-                    sol.initial_cars_number[origin_station_id] = origin_new_cars
-                    sol.initial_cars_number[destination_station_id] = destination_new_cars
-
-                    sol.selected_paths[req.scenario_id][trip.fp_id] = true # we can serve the trip
-                    break # we skip all the other trips of the request 
-                end
-            end
-        end
-    end
-end
 
 function get_all_stations_bounds(sol)
     stations_bounds = []
@@ -567,7 +518,7 @@ function open_station_neighborhood1(sol::Solution)
 
     # step2: select randomly the station and the scenario to be used
     station_id = rand(rng, 1:length(neigh_sol.open_stations_state))
-    scenario_id = rand(rng, 1:length(scenario_list))
+    #scenario_id = rand(rng, 1:length(scenario_list))
 
     #make sure that the station is open
     neigh_sol.open_stations_state[station_id] = true
@@ -577,7 +528,8 @@ function open_station_neighborhood1(sol::Solution)
         neigh_sol.initial_cars_number[station_to_open] = floor(stations_capacity[station_to_open] / 2)
     else
         #in offline mode we need to serve new requests
-        serve_new_requests_new1!(neigh_sol, scenario_list, [scenario_id], station_id)
+        serve_new_requests_new1!(neigh_sol, scenario_list, collect(1:length(scenario_list)), station_id)
+        #serve_new_requests_new1!(neigh_sol, scenario_list, [scenario_id], station_id)
     end
 
     return neigh_sol
@@ -587,52 +539,76 @@ end
 consider only one scenario at a time
 """
 function serve_new_requests_new1!(sol::Solution, scenario_list::Array{Scenario,1}, selected_scenarios::Vector{Int64}, station_id::Int64)
-    #sol, station_id = load_sol("sol_error.jls"), 43;
-    #sol.open_stations_state[station_id] = true
+    
+    #station_id , sol, selected_scenarios = 72, load_sol("sol.jls"), [2]
+    #= save_sol(sol, "sol.jls")
+    @warn "serve_new_requests_new1! station_id = $station_id, selected_scenarios = $selected_scenarios" =#
     global stations_capacity
     global request_feasible_trips_ids
     global locations_dict
-
+    
     station_node_id = get_potential_locations()[station_id]
+    
+    # Step 1: get all the trips for all the scenario where station intervene
+    trips = [filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
+        scenario.feasible_paths) for scenario in scenario_list[selected_scenarios]]
+    for i in eachindex(trips)
+        sc_id = selected_scenarios[i]
+        trips[i].scenario_id = ones(Int, nrow(trips[i])) .* sc_id
+    end
+    trips = vcat(trips...)
 
-    for scenario in scenario_list[selected_scenarios]
-        # scenario = scenario_list[1]
-        #step 1 : get the list of trips where station intervenes as a pickup station or a dropoff station
-        trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id, scenario.feasible_paths)
-        
-        #step 2 : order the trips by their revenue
-        sort!(trips, [:Rev], rev=true)
-
-        for trip in eachrow(trips)
-            # trip = trips[6,:]
-            # check if the requests is not served yet
-            is_served = !isnothing(findfirst(sol.selected_paths[scenario.scenario_id][request_feasible_trips_ids[scenario.scenario_id][trip.req]]))
-            if is_served
-                #the trip is already served
-                continue
-            end
-
-            #the request is not served yet
-            destination_station_id = locations_dict[trip.destination_station]
-            origin_station_id = locations_dict[trip.origin_station]
-            #check if we can serve the trip
-            #origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario, sol, origin_station_id, trip)
-            origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, origin_station_id, trip)
-            if origin_can_serve
-                des_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, destination_station_id, trip)
-
-                if des_can_serve
-                    #here we are sure that we can serve the trip
-                    sol.initial_cars_number[origin_station_id] = origin_new_cars
-                    sol.initial_cars_number[destination_station_id] = destination_new_cars
-
-                    sol.selected_paths[scenario.scenario_id][trip.fp_id] = true # we can serve the trip
-                    #@info "we can serve the trip $(trip.fp_id)"
-                end
-            end
-
+    requests_list = unique(trips, [:req, :scenario_id])
+    sort!(requests_list, [:scenario_id, :Rev], rev=[false, true])
+    #shuffle!(requests_list)
+    
+    for req in eachrow(requests_list)
+        # req = requests_list[1,:]
+        # check if the requests is not served yet
+        is_served = !isnothing(findfirst(sol.selected_paths[req.scenario_id][request_feasible_trips_ids[req.scenario_id][req.req]]))
+        if is_served
+            #the trip is already served
+            continue
         end
 
+        #check if the request can be served from the station id
+        station_can_serve, station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, station_id, req)
+
+        if !station_can_serve
+            continue
+        end
+        
+        #the request is not served yet
+        #get the trips of the request
+        req_trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
+            scenario_list[req.scenario_id].feasible_paths[request_feasible_trips_ids[req.scenario_id][req.req], :])
+
+        other_stations = locations_dict[req_trips.origin_station[1]] == station_id ?
+                                            [locations_dict[x] for x in req_trips.destination_station] : 
+                                            [locations_dict[x] for x in req_trips.origin_station]
+        
+        #get_other stations_bounds to privilege the less ristricted stations
+        other_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, other_stations[i]) for i in eachindex(other_stations)]
+        
+        other_station_order = sortperm([other_stations_bounds[i][2] #= upper =# - 
+                                        other_stations_bounds[i][1] #= upper =# 
+                                        for i in eachindex(other_stations)], rev=true) 
+        #other_station_order = collect(1:length(other_stations))
+        #check if we can serve the trip
+        for i in other_station_order
+            # i = other_station_order[1] 
+            trip = req_trips[i,:]
+            other_station_id = other_stations[i]
+            other_station_can_serve, other_station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, other_station_id, trip)
+            
+            if other_station_can_serve
+                #here we are sure that we can serve the trip
+                sol.initial_cars_number[station_id] = station_new_cars
+                sol.initial_cars_number[other_station_id] = other_station_new_cars
+                sol.selected_paths[req.scenario_id][trip.fp_id] = true # we can serve the trip
+                break
+            end
+        end
     end
 
 end
