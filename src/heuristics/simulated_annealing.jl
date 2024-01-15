@@ -23,10 +23,10 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
         set_trips_to_requets_var()
     end
 
-    total_tried = 0
-    total_accepted = 0
+    #total_tried = 0
+    #total_accepted = 0
     current_solution = deepcopy(initial_solution)
-    current_cost = E_carsharing_sim(current_solution)
+    current_cost = ECS_objective_function(current_solution)
     best_solution = deepcopy(current_solution)
     best_cost = current_cost
     τ = τ⁰
@@ -51,13 +51,13 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
                     best_cost = neighbor_cost
                 end
             else
-                total_tried += 1
+                #total_tried += 1
                 acceptance_probability = exp((current_cost - neighbor_cost) / τ)
                 #@info "Δ = $(current_cost - neighbor_cost), prob = $acceptance_probability"
                 if rand(rng) < acceptance_probability
                     current_solution = neighbor_solution
                     current_cost = neighbor_cost
-                    total_accepted += 1
+                    #total_accepted += 1
                 end
 
             end
