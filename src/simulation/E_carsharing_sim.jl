@@ -50,6 +50,7 @@ global trips_to_unselect_lock = ReentrantLock()
 
 global stations_capacity = [get_prop(manhaten_city_driving_graph, potential_locations[i], :max_number_of_charging_points) for i in eachindex(get_potential_locations())]
 
+global request_feasible_trips_ids = []
 ############################### Multi threading ##################################
 
 function E_carsharing_sim(sol::Solution)
@@ -239,6 +240,8 @@ function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_sce
         number_of_requests_per_scenario = nbr_requests_per_scenario
     end
     global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
+
+    set_trips_to_requets_var()
 end
 
 function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
@@ -907,6 +910,7 @@ function generate_random_solution(; open_stations_number=-1)
 
     set_online_mode(old_online_serving_value)
     #sol = load_sol("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/Data/other/GIHH_sol.jls")
+    clean_up_cars_number!(sol)
     sol
 
 end

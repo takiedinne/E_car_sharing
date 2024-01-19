@@ -569,8 +569,8 @@ function solve_single_scenario_using_SA()
     main_seed = 1905
 
     #variables related to simulated simulated_annealing
-    T, T₀, I, α, β = 796., 20., 82, .98, .5
-    
+    T, T₀, I, α, β = 796.0, 20.0, 82, 0.98, 0.5
+
     #scenario parameters
     scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     walking_time_list = [5]
@@ -586,14 +586,16 @@ function solve_single_scenario_using_SA()
     CSV.write(results_save_path, df)# write the header
 
     for (sc_id, wt) in Iterators.product(scenario_list, walking_time_list)
-        
+
         @info "[ECS using SA]: scenario N° $sc_id walking time = $wt"
 
         #set the  global variables 
         global maximum_walking_time = wt
-        
+
         #initialize the scenario:
         initialize_scenarios([sc_id])
+        #global request_feasible_trips_ids = [] #to get feasible trips for req i on scenario s : request_feasible_trips_ids[s][i]
+
         initial_solutions = [generate_random_solution() for _ in 1:trial_nbr]
 
         for i in 1:trial_nbr
@@ -603,7 +605,7 @@ function solve_single_scenario_using_SA()
             push!(df, [sc_id, i, obj, sa_cpu])
             CSV.write(results_save_path, df, append=true)
         end
-   
+
     end
 
 end
@@ -611,17 +613,17 @@ end
 function SA_params()
     global rng
 
-    T_list = Float64[796.0]
-    T0_list = Float64[1, 10, 20]
+    T_list = Float64[1061.95]
+    T0_list = Float64[1.]
     α_list = [0.98] #= , 0.99, 0.998 =#
     I_list = [82]
-    β_list = [0.5]
-    
+    β_list = [0.5, 0.6, 0.7, 0.8, 0.9]
+
     main_seed = 1905
 
-    trial_nbr = 3
+    trial_nbr = 10
     # the folder where the results will be stored
-    result_folder_for_this_experiment = string(results_folder, "/SA_params/TS")
+    result_folder_for_this_experiment = string(results_folder, "/SA_params/Beta")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
@@ -651,4 +653,64 @@ function SA_params()
         push!(df, [T, T0, α, I, β, fit / trial_nbr, best_fit, TT / trial_nbr])
         CSV.write(results_save_path, df, append=true)
     end
+end
+
+function SA_get_T0()
+   
+    T = 1
+    acceptance_rate = 0.8
+    incrementing_factor = 1.1
+    emperical_rate = 0.0 
+    while emperical_rate < acceptance_rate
+        @info "trying T = $T"
+        T = T * incrementing_factor
+        emperical_rate = mean([get_acceptance_rate(T) for _ in 1:10])
+    end
+
+    return T
+end
+
+
+function get_acceptance_rate(T)
+    sc_id = 7
+    initialize_scenarios([sc_id])
+    
+    sol = generate_random_solution()
+    
+    sol_fit = E_carsharing_sim(sol)
+
+    empirical_acceptance_rate = 0.0
+    total_number_of_neighbors = length(findall(sol.open_stations_state))
+
+    #@info "trying T = $T"
+    accepted_sol = 0
+
+    # second neighbourhood
+    open_stations = findall(sol.open_stations_state)
+
+    for i in open_stations
+        new_sol = deepcopy(sol)
+        new_sol.open_stations_state[i] = false
+        new_sol.initial_cars_number[i] = 0
+
+        lost_requests = clean_up_trips!(new_sol, scenario_list, i)
+
+        # step 4: reassign the lost requests if we can
+        assigne_requests!(new_sol, scenario_list, lost_requests)
+
+        new_fit = ECS_objective_function(new_sol)
+
+        if new_fit < sol_fit
+            accepted_sol += 1
+        else
+            if rand(rng) <= exp(-(new_fit - sol_fit) / T)
+                accepted_sol += 1
+            end
+        end
+    end
+
+    #calculate the empirical_acceptance_rate
+    empirical_acceptance_rate = accepted_sol / total_number_of_neighbors
+
+    return empirical_acceptance_rate
 end

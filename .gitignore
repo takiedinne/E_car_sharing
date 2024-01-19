@@ -1,5 +1,5 @@
 .DS_Store
-Data/Charts/*
+Data/Charts
 Data/generated_scenario/*
 !Data/generated_scenario/scenario_txt_files
 
@@ -7,10 +7,10 @@ Data/Instances/*
 !Data/Instances/Scenarios_1000_greaterthan2/scenario_txt_files
 !Data/Instances/C1_5000_500/scenario_txt_files
 
-Data/other/*
-Data/MIP/*
-results/*
+Data/other
+Data/MIP
+results
 test.jl
-Scenario_analysis/*
-sols/*
-charts/*
+Scenario_analysis
+sols
+Plots_files

@@ -576,7 +576,7 @@ function get_station_selected_trips(sol::Solution, station_id::Int64)
                          x.destination_station == station_node_id ,
                          scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
                          for scenario in scenario_list]
-                         
+                                  
     for i in eachindex(scenario_list)
         station_trips[i].scenario_id = i .* ones(Int, nrow(station_trips[i]))
     end
@@ -597,4 +597,16 @@ function get_station_feasible_trips(station_id::Int64)
     end
 
     return vcat(station_trips ...)
+end
+
+function set_trips_to_requets_var()
+    global request_feasible_trips_ids = []
+
+    for scenario in scenario_list
+        fp = [Int[] for _ in eachindex(scenario.request_list.reqId)]
+        for i in eachindex(scenario.feasible_paths.req)
+            push!(fp[scenario.feasible_paths.req[i]], i)
+        end
+        push!(request_feasible_trips_ids, fp)
+    end
 end
