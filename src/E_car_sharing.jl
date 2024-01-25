@@ -24,11 +24,13 @@ using BenchmarkTools
 using SparseArrayKit
 
 using GraphMakie
-#using GLMakie
+using GLMakie
 
 using StatsPlots
 using Random
 using Combinatorics
+using OSMMakie
+using LightOSM
 
 include("simulation/data_structure.jl")
 include("simulation/Vars.jl")
@@ -45,6 +47,7 @@ include("analysis.jl")
 
 include("heuristics/heuristics.jl")
 include("heuristics/simulated_annealing.jl")
+include("heuristics/greedy_requests_assignment.jl")
 
 export E_carsharing_sim,
     Solution,

@@ -569,7 +569,7 @@ function solve_single_scenario_using_SA()
     main_seed = 1905
 
     #variables related to simulated simulated_annealing
-    T, T₀, I, α, β = 796.0, 20.0, 82, 0.98, 0.5
+    T, T₀, I, α, β = 796.0, 20.0, 82, 0.98, 0.8
 
     #scenario parameters
     scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -617,11 +617,11 @@ function SA_params()
     T0_list = Float64[1.]
     α_list = [0.98] #= , 0.99, 0.998 =#
     I_list = [82]
-    β_list = [0.5, 0.6, 0.7, 0.8, 0.9]
+    β_list = collect(0.5:0.01:0.9)
 
     main_seed = 1905
 
-    trial_nbr = 10
+    trial_nbr = 1
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/SA_params/Beta")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
@@ -714,3 +714,41 @@ function get_acceptance_rate(T)
 
     return empirical_acceptance_rate
 end
+
+function solve_single_scenario_using_GRA()
+       
+    #scenario parameters
+    scenario_list_id = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    walking_time_list = [5]
+
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/solve_single_scenario_with_greedy_assign_requests")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment, "/single_scenario_GAR_", now(), ".csv")
+
+    df = DataFrame(scenario_id=Int64[], trial_id=Int64[], sa_obj=[], cpu_time=[])
+    CSV.write(results_save_path, df)# write the header
+
+    for (sc_id, wt) in Iterators.product(scenario_list_id, walking_time_list)
+        
+        @info "[ECS using SA]: scenario N° $sc_id walking time = $wt"
+
+        #set the  global variables 
+        global maximum_walking_time = wt
+
+        #initialize the scenario:
+        initialize_scenarios([sc_id])
+        initialize_sim(Solution(), scenario_list[1])
+        #global request_feasible_trips_ids = [] #to get feasible trips for req i on scenario s : request_feasible_trips_ids[s][i]
+
+        _, obj, sa_cpu = greedy_assign_requests()
+        empty!(df)
+        push!(df, [sc_id, 1, obj, sa_cpu])
+        CSV.write(results_save_path, df, append=true)
+        
+    end
+
+end
+

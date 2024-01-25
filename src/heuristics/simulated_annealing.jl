@@ -1,13 +1,14 @@
 export simulated_annealing
 
 global opt_fit = 1
+global greedy_params = 1.0
 
 function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, τˢ::Float64=0.1, α::Float64=0.9998, Ι::Int64=1775, β::Float64=0.5)
     #global rng = MersenneTwister(1234)
-    
+
     #τ⁰, τˢ, α, Ι, β = 1061.95, 1.06, 0.98, 30, .8
     sa_start_time = time()
-    
+
     #total_tried = 0
     #total_accepted = 0
     current_solution = deepcopy(initial_solution)
@@ -17,14 +18,14 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
     τ = τ⁰
     while τ > τˢ
         for _ in 1:Ι  # Number of iterations at each temperature
-            
+
             neighbor_solution = sample_neighbor(current_solution, β)
             #@info "sa = neighbor_solution = $neighbor_solution"
-           
+
             #clean_up_cars_number!(neighbor_solution)
             neighbor_cost = ECS_objective_function(neighbor_solution)
-            
-          
+
+
 
             if neighbor_cost <= current_cost
                 current_solution = neighbor_solution
@@ -49,9 +50,9 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
         τ *= α
         @info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
     end
-    
+
     @info "best_cost = $best_cost, gap = $(round((best_cost - opt_fit )/ opt_fit * 100, digits=2))% time = $( time() - sa_start_time)"
-    return best_solution, best_cost, ( time() - sa_start_time)
+    return best_solution, best_cost, (time() - sa_start_time)
 end
 
 ##### Neighborhood functions #####
@@ -70,7 +71,7 @@ end
 function open_station_neighborhood(sol::Solution)
     #@info "open station neighborhood"
     #@info "sol = $sol"
-    
+
     ## flip state of one random station
     global rng
     global online_request_serving
@@ -91,8 +92,8 @@ function open_station_neighborhood(sol::Solution)
 
     # step2: select randomly the station and the scenario to be used
     station_id = rand(rng, 1:length(neigh_sol.open_stations_state))
-    #scenario_id = rand(rng, 1:length(scenario_list))
-    
+    scenario_id = rand(rng, 1:length(scenario_list))
+
     #make sure that the station is open
     neigh_sol.open_stations_state[station_id] = true
 
@@ -100,19 +101,19 @@ function open_station_neighborhood(sol::Solution)
         # step4: update the station initial number of cars
         neigh_sol.initial_cars_number[station_to_open] = floor(stations_capacity[station_to_open] / 2)
     else
-       
+
         #in offline mode we need to serve new requests
-        serve_new_requests!(neigh_sol, scenario_list, collect(1:length(scenario_list)), station_id)
-        #serve_new_requests_new1!(neigh_sol, scenario_list, [scenario_id], station_id)
-      
+        #serve_new_requests!(neigh_sol, scenario_list, collect(1:length(scenario_list)), station_id)
+        serve_new_requests!(neigh_sol, scenario_list, [scenario_id], station_id)
+        
     end
-    
+
     return neigh_sol
 end
 
 
 function close_station_neighborhood(sol::Solution)
-   
+
     ## flip state of one random station
     global rng
     global online_request_serving
@@ -128,15 +129,15 @@ function close_station_neighborhood(sol::Solution)
         return neigh_sol
     end
     station_to_close = opened_stations[rand(rng, 1:length(opened_stations))]
-    
+
     neigh_sol.open_stations_state[station_to_close] = false
     neigh_sol.initial_cars_number[station_to_close] = 0
 
     if !online_request_serving
         # step 3: get the requests List to lost
-       
+
         lost_requests = clean_up_trips!(neigh_sol, scenario_list, station_to_close)
-         
+
         # step 4: reassign the lost requests if we can
         assigne_requests!(neigh_sol, scenario_list, lost_requests)
 
@@ -150,20 +151,20 @@ end
 function clean_up_trips!(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
     #save_sol(sol, "sol_error_before_clean_up.jls")
     #= @info  "clean up station $station_id" =#
-   
+
     unseleceted_requests = Vector{Vector{Int64}}()
     station_node_id = get_potential_locations()[station_id]
-    
+
     for scenario in scenario_list
         # scenario = scenario_list[1];
         # get requests to lost and unselect their trips
         trips = filter(x -> x.origin_station == station_node_id ||
                 x.destination_station == station_node_id,
-                scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
+            scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
 
         curr_scenario_requests_to_lost = trips.req
         sol.selected_paths[scenario.scenario_id][trips.fp_id] .= false
-        
+
         # Second check: if a car which start from station is used to serve a request in other station
         stations_to_recheck = map(x -> locations_dict[x], filter(x -> x != station_node_id, union(trips.origin_station, trips.destination_station)))
         for station_id in stations_to_recheck
@@ -171,7 +172,7 @@ function clean_up_trips!(sol::Solution, scenario_list::Array{Scenario,1}, statio
             additional_station_to_recheck, requests_to_lost_from_station = recheck_station!(sol, scenario, station_id)
             length(additional_station_to_recheck) > 0 && push!(stations_to_recheck, additional_station_to_recheck...)
             length(requests_to_lost_from_station) > 0 && push!(curr_scenario_requests_to_lost, requests_to_lost_from_station...)
-           
+
         end
 
         push!(unseleceted_requests, curr_scenario_requests_to_lost)
@@ -184,7 +185,7 @@ function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64)
     #= save_sol(sol, "sol_error.jls")
     @info "recheck station $station_id" =#
     #station_id = 80
-   
+
     stations_to_recheck, requests_to_unserve = Int64[], Int64[]
 
     # Step 1: check the new bound of the station and creect it if the solution is not feasible
@@ -194,13 +195,13 @@ function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64)
         stations_to_recheck, requests_to_unserve = correct_station_trips(scenario, station_id, sol, sol.initial_cars_number[station_id])
         sc_bounds = get_station_cars_bounds(scenario, sol, station_id)
     end
-    
+
     #check the other scenarios
-    if length(scenario_list) == 1 
+    if length(scenario_list) == 1
         sol.initial_cars_number[station_id] = sc_bounds[1]
-        return  (unique!(stations_to_recheck), unique!(requests_to_unserve))
+        return (unique!(stations_to_recheck), unique!(requests_to_unserve))
     end
-    
+
     bounds = []
     for sc_id in eachindex(scenario_list)
         #sc_id = 3
@@ -232,29 +233,28 @@ function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64)
 end
 
 function assigne_requests!(sol::Solution, scenario_list::Array{Scenario,1}, requests_list::Vector{Vector{Int64}})
-   
+
     #step 1: order all the requests by their revenue
     requests_list_df = vcat([DataFrame(reqId=requests_list[sc_id],
         Rev=scenario_list[sc_id].request_list.Rev[requests_list[sc_id]],
         scenario_id=ones(Int, length(requests_list[sc_id])) .* sc_id)
                              for sc_id in eachindex(scenario_list)]...)
-    
+
     sort!(requests_list_df, [:scenario_id, :Rev], rev=[false, true])
-    
+
     #loop over the requests
     for req in eachrow(requests_list_df)
         #req = requests_list_df[3, :]
         #get the feasible trips for the current request
         #curr_req_feasible_trips = filter(x -> x.req == req.reqId, scenario_list[req.scenario_id].feasible_paths)
-        curr_req_feasible_trips = scenario_list[req.scenario_id].
-                                        feasible_paths[request_feasible_trips_ids[req.scenario_id][req.reqId], :]
-        
+        curr_req_feasible_trips = scenario_list[req.scenario_id].feasible_paths[request_feasible_trips_ids[req.scenario_id][req.reqId], :]
+
         origin_stations_ids = unique([locations_dict[x] for x in curr_req_feasible_trips.origin_station])
         destination_stations_ids = unique([locations_dict[x] for x in curr_req_feasible_trips.destination_station])
         # sort the station to less restrictive first
         #origin_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in origin_stations_ids]
         #destination_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in destination_stations_ids]
-        
+
         #= origin_station_order = sortperm([origin_stations_bounds[i][2] - #= upper =#
                                          origin_stations_bounds[i][1] #= upper =#
                                          for i in eachindex(origin_stations_bounds)], rev=true) =#
@@ -267,24 +267,24 @@ function assigne_requests!(sol::Solution, scenario_list::Array{Scenario,1}, requ
         origin_station_order = collect(1:length(origin_stations_ids))
         destination_station_order = collect(1:length(destination_stations_ids))
         origin_can_serve, des_can_serve = false, false
-        
+
         for o_id in origin_stations_ids[origin_station_order]
             #o_id = origin_stations_ids[3]
-            origin_trips = filter(x-> x.origin_station == get_potential_locations()[o_id], curr_req_feasible_trips)
+            origin_trips = filter(x -> x.origin_station == get_potential_locations()[o_id], curr_req_feasible_trips)
             origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, o_id, origin_trips[1, :])
-            
+
             if !origin_can_serve
                 continue
             end
 
             for d_id in destination_stations_ids[destination_station_order]
-                trips = filter(x-> x.destination_station == get_potential_locations()[d_id], origin_trips)
+                trips = filter(x -> x.destination_station == get_potential_locations()[d_id], origin_trips)
                 if isempty(trips)
                     continue
                 end
-                trip = trips[1,:]
+                trip = trips[1, :]
                 des_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, d_id, trip)
-                
+
                 if !des_can_serve
                     continue
                 end
@@ -313,7 +313,7 @@ function correct_station_trips(scenario::Scenario, station_id::Int64, sol::Solut
     trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
         scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
 
-    trips_interesting_time = [(trip.origin_station == station_node_id) ? trip.start_driving_time : trip.arriving_time + .1 for trip in eachrow(trips)]
+    trips_interesting_time = [(trip.origin_station == station_node_id) ? trip.start_driving_time : trip.arriving_time + 0.1 for trip in eachrow(trips)]
     trips_order = sortperm(trips_interesting_time)
 
     # the results of the correction
@@ -322,7 +322,7 @@ function correct_station_trips(scenario::Scenario, station_id::Int64, sol::Solut
     # we set the cars number to lower bound of all the other scenarios
     cars_number = initial_number_of_cars
 
-    
+
     for curr_trip_id in trips_order
         #curr_trip_id = trips_order[1]
         cars_number += (trips.origin_station[curr_trip_id] == station_node_id) ? -1 : 1
@@ -409,12 +409,12 @@ function get_all_stations_bounds(sol)
     for st in eachindex(sol.open_stations_state)
         bounds = []
         for i in eachindex(scenario_list)
-            if isempty(bounds) 
-                bounds = e.get_station_cars_bounds(e.scenario_list[i], sol, st) 
+            if isempty(bounds)
+                bounds = e.get_station_cars_bounds(e.scenario_list[i], sol, st)
             else
-                bounds = hcat(bounds, e.get_station_cars_bounds(e.scenario_list[i], sol, st) )
+                bounds = hcat(bounds, e.get_station_cars_bounds(e.scenario_list[i], sol, st))
             end
-        
+
         end
         push!(stations_bounds, [maximum(bounds[1, :]), minimum(bounds[2, :])])
     end
@@ -424,12 +424,12 @@ end
 function station_all_scenario_bounds(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
     bounds = []
     for i in eachindex(scenario_list)
-        if isempty(bounds) 
-            bounds = get_station_cars_bounds(scenario_list[i], sol, station_id) 
+        if isempty(bounds)
+            bounds = get_station_cars_bounds(scenario_list[i], sol, station_id)
         else
-            bounds = hcat(bounds, get_station_cars_bounds(scenario_list[i], sol, station_id) )
+            bounds = hcat(bounds, get_station_cars_bounds(scenario_list[i], sol, station_id))
         end
-    
+
     end
     return [maximum(bounds[1, :]), minimum(bounds[2, :])]
 end
@@ -440,13 +440,13 @@ function serve_new_requests!(sol::Solution, scenario_list::Array{Scenario,1}, se
     global stations_capacity
     global request_feasible_trips_ids
     global locations_dict
-    
+
     station_node_id = get_potential_locations()[station_id]
-    
+
     # Step 1: get all the trips for all the scenario where station intervene
     trips = [filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
         scenario.feasible_paths) for scenario in scenario_list[selected_scenarios]]
-    
+
     for i in eachindex(trips)
         sc_id = selected_scenarios[i]
         trips[i].scenario_id = ones(Int, nrow(trips[i])) .* sc_id
@@ -454,11 +454,14 @@ function serve_new_requests!(sol::Solution, scenario_list::Array{Scenario,1}, se
     trips = vcat(trips...)
 
     requests_list = unique(trips, [:req, :scenario_id])
-    sort!(requests_list, [:scenario_id, :Rev], rev=[false, true])
-    #shuffle!(requests_list)
-    
+    if rand(rng) < greedy_params
+        sort!(requests_list, [:scenario_id, :Rev], rev=[false, true])
+    else
+        shuffle!(requests_list)
+    end
+
     for req in eachrow(requests_list)
-        
+
         # check if the requests is not served yet
         is_served = !isnothing(findfirst(sol.selected_paths[req.scenario_id][request_feasible_trips_ids[req.scenario_id][req.req]]))
         if is_served
@@ -472,31 +475,35 @@ function serve_new_requests!(sol::Solution, scenario_list::Array{Scenario,1}, se
         if !station_can_serve
             continue
         end
-        
+
         #the request is not served yet
-        
+
         #get the trips of the request
         req_trips = filter(x -> x.origin_station == station_node_id || x.destination_station == station_node_id,
             scenario_list[req.scenario_id].feasible_paths[request_feasible_trips_ids[req.scenario_id][req.req], :])
 
         other_stations = locations_dict[req_trips.origin_station[1]] == station_id ?
-                                            [locations_dict[x] for x in req_trips.destination_station] : 
-                                            [locations_dict[x] for x in req_trips.origin_station]
-        
+                         [locations_dict[x] for x in req_trips.destination_station] :
+                         [locations_dict[x] for x in req_trips.origin_station]
+
         #get_other stations_bounds to privilege the less ristricted stations
-        other_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, other_stations[i]) for i in eachindex(other_stations)]
-        
-        other_station_order = sortperm([other_stations_bounds[i][2] #= upper =# - 
-                                        other_stations_bounds[i][1] #= upper =# 
-                                        for i in eachindex(other_stations)], rev=true) 
+        if rand(rng) < greedy_params
+            other_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, other_stations[i]) for i in eachindex(other_stations)]
+
+            other_station_order = sortperm([other_stations_bounds[i][2] - #= upper =#
+                                            other_stations_bounds[i][1] #= upper =#
+                                            for i in eachindex(other_stations)], rev=true)
+        else
+            other_station_order = collect(1:length(other_stations))
+        end
         #other_station_order = collect(1:length(other_stations))
         #check if we can serve the trip
         for i in other_station_order
             # i = other_station_order[1] 
-            trip = req_trips[i,:]
+            trip = req_trips[i, :]
             other_station_id = other_stations[i]
             other_station_can_serve, other_station_new_cars = can_serve_and_get_cars_number(scenario_list, req.scenario_id, sol, other_station_id, trip)
-            
+
             if other_station_can_serve
                 #here we are sure that we can serve the trip
                 sol.initial_cars_number[station_id] = station_new_cars
@@ -507,21 +514,21 @@ function serve_new_requests!(sol::Solution, scenario_list::Array{Scenario,1}, se
         end
     end
 
-    
-        #= cars = sol.initial_cars_number[station_id]
-        clean_up_cars_number!(sol)
-        if cars != sol.initial_cars_number[station_id]
-            println("sol = $(load_sol("sol.jls"))
-            station_id = $station_id")
-            println("######################################################################")
-        end  =#
 
-       
+    #= cars = sol.initial_cars_number[station_id]
+    clean_up_cars_number!(sol)
+    if cars != sol.initial_cars_number[station_id]
+        println("sol = $(load_sol("sol.jls"))
+        station_id = $station_id")
+        println("######################################################################")
+    end  =#
+
+
 
 end
 
 function close_station_neighborhood_new(sol::Solution)
-    
+
     ## flip state of one random station
     global rng
     global online_request_serving
@@ -537,42 +544,45 @@ function close_station_neighborhood_new(sol::Solution)
         return neigh_sol
     end
     station_to_close = opened_stations[rand(rng, 1:length(opened_stations))]
-    
+
     neigh_sol.open_stations_state[station_to_close] = false
     neigh_sol.initial_cars_number[station_to_close] = 0
 
     if !online_request_serving
         # step 3: get the requests List to lost
-        
-        stations_to_check = clean_up_trips_new!(neigh_sol, scenario_list, station_to_close)
-        
+
+        stations_to_check, lost_requests = clean_up_trips_new!(neigh_sol, scenario_list, station_to_close)
+
         # step 4: reassign the lost requests if we can
+        assigne_requests!(neigh_sol, scenario_list, lost_requests)
+        
+        # 
         for st in stations_to_check
             serve_new_requests!(neigh_sol, scenario_list, collect(1:length(scenario_list)), st)
         end
 
     end
-    
+
     return neigh_sol
 end
 
 function clean_up_trips_new!(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
     #sol, station_id = load_sol("sol.jls"), 80;
-    
+
     unseleceted_requests = Vector{Vector{Int64}}()
     stations_to_recheck = Int64[]
     station_node_id = get_potential_locations()[station_id]
-    
+
     for scenario in scenario_list
         # scenario = scenario_list[1];
         # get requests to lost and unselect their trips
         trips = filter(x -> x.origin_station == station_node_id ||
                 x.destination_station == station_node_id,
-                scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
+            scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
 
         curr_scenario_requests_to_lost = trips.req
         sol.selected_paths[scenario.scenario_id][trips.fp_id] .= false
-        
+
         # Second check: if a car which start from station is used to serve a request in other station
         push!(stations_to_recheck, map(x -> locations_dict[x], filter(x -> x != station_node_id, union(trips.origin_station, trips.destination_station)))...)
         for station_id in stations_to_recheck
@@ -580,11 +590,11 @@ function clean_up_trips_new!(sol::Solution, scenario_list::Array{Scenario,1}, st
             additional_station_to_recheck, requests_to_lost_from_station = recheck_station!(sol, scenario, station_id)
             length(additional_station_to_recheck) > 0 && push!(stations_to_recheck, additional_station_to_recheck...)
             length(requests_to_lost_from_station) > 0 && push!(curr_scenario_requests_to_lost, requests_to_lost_from_station...)
-           
+
         end
 
         push!(unseleceted_requests, curr_scenario_requests_to_lost)
     end
 
-    return stations_to_recheck
+    return stations_to_recheck, unseleceted_requests
 end

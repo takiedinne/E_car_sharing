@@ -542,6 +542,19 @@ function get_trip_distance(id_node1, id_node2)
     distance
 end
 
+function get_walking_distance(id_node1, id_node2)
+    if id_node1 ∉ keys(shortest_walking_paths)
+        Threads.lock(shortest_walking_paths_lock)
+        try
+            shortest_walking_paths[id_node1] = dijkstra_shortest_paths(manhaten_city_length_graph, [id_node1])
+        finally
+            Threads.unlock(shortest_walking_paths_lock)
+        end
+    end
+    distance = shortest_walking_paths[id_node1].dists[id_node2]
+    distance
+end
+
 function get_trip_battery_consumption(id_node1::Int64, id_node2::Int64, Tcar::car_type)
     α = vehicle_specific_values[Tcar][:α]
     β = vehicle_specific_values[Tcar][:β]

@@ -296,7 +296,7 @@ function plot_nbr_requests_per_station(scenarios::Vector{Scenario}, walking_time
         #get requests id that are assigned to the solution
         req_ids = [scenarios[sc].feasible_paths[sol.selected_paths[sc], :] for sc in eachindex(scenarios)]
         requests_df = vcat(req_ids...)
-        figure_title = "Number of requests that are with in the walking time for each station (solution)"
+        figure_title = "Number of requests that are within the walking time for each station (solution) ($(length(scenarios)) scenarios)"
 
         for station_node in stations_node_ids
             nbr_requests_start = nrow(filter(row -> row.origin_station == station_node, requests_df))
@@ -305,7 +305,7 @@ function plot_nbr_requests_per_station(scenarios::Vector{Scenario}, walking_time
         end
     else
         requests_df = vcat([scenario.request_list for scenario in scenarios]...)
-        figure_title = "Number of requests that are with in the walking time for each station ($(length(scenarios)) scenarios)"
+        figure_title = "Number of requests that are within the walking time for each station ($(length(scenarios)) scenarios)"
 
         for station_node in stations_node_ids
             nbr_requests_start = nrow(filter(row -> get_walking_time(row.ON, station_node) <= walking_time, requests_df))
@@ -336,6 +336,7 @@ function plot_nbr_requests_per_station(scenarios::Vector{Scenario}, walking_time
         savefig(p, save_file_path)
     end
     display(p)
+    return p
 end
 
 """
@@ -479,4 +480,56 @@ function plot_requests_assignements(scenarios::Vector{Scenario}, sol::Solution; 
         savefig(p, save_file_path)
     end
     display(p)
+end
+
+function plot_nbr_req_where_station_is_unique(scenario_list::Vector{Scenario}, opt_sol::Union{Nothing, Solution}=nothing)
+
+    nbr_requests_per_station = zeros(Int64, length(get_potential_locations()))
+    
+    for scenario in scenario_list
+        for req in scenario.request_list.reqId
+
+            trips_id = request_feasible_trips_ids[scenario.scenario_id][req]
+            trips = scenario.feasible_paths[trips_id, :]
+            #check origin 
+            if length(unique(trips.origin_station)) == 1
+                nbr_requests_per_station[locations_dict[trips.origin_station[1]]] += 1
+            end
+
+            #check origin 
+            if length(unique(trips.destination_station)) == 1
+                nbr_requests_per_station[locations_dict[trips.destination_station[1]]] += 1
+            end
+        end
+    end
+    
+    figure_title = "requests where the station is the only accessible station ($(length(scenario_list)) scenarios)"
+
+    p = bar(nbr_requests_per_station,
+         label="Number of requests",
+          title=figure_title, 
+          legend=false, ylabel="Number of requests",
+          size=(1920, 800))
+    ticks = string.(collect(1:length(get_potential_locations())))
+    StatsPlots.xticks!(1:length(get_potential_locations()), ticks)
+   
+    if isnothing(opt_sol)
+        return p
+    end
+    
+    function multicolor_xticks!(sol)
+        p = Plots.current()
+        xticks_var, xlabels_var = Plots.xticks(p)[1]
+        yl = Plots.ylims(p)
+        y0 = @. zero(xticks_var) + yl[1] - 0.03*(yl[2] - yl[1])
+        n = length(xticks_var)
+        colors = [sol.open_stations_state[i] ? :green : :red for i in 1:n]
+        StatsPlots.xticks!(xticks_var, fill(" ",n))
+        [annotate!(xi, yi, StatsPlots.text(li,9,ci,:bottom)) for (xi,yi,li,ci) in zip(xticks_var, y0, xlabels_var, colors)]
+        return Plots.current()
+    end
+
+    multicolor_xticks!(opt_sol)
+    
+    return p 
 end
