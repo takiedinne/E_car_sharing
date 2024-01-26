@@ -752,3 +752,47 @@ function solve_single_scenario_using_GRA()
 
 end
 
+function ruin_depth()
+    global ruin_depth
+
+    ruin_depth_list = collect(0.02:0.02:0.8)
+    trial_nbr = 10
+    scenario_list_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/ruin_depth")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment, "/ruin_depth_", now(), ".csv")
+
+    df = DataFrame(depth=Float64[], Δ_fit=[], cpu_time=[])
+    CSV.write(results_save_path, df)# write the header
+ 
+    fill_adjacent_stations()
+    
+    for rd in ruin_depth_list
+        
+        ruin_depth = rd
+        sum_percentage = 0.0
+        cpu_time = 0.0
+        
+        for sc in scenario_list_ids
+            initialize_scenarios([sc])
+            sol, fit, _= greedy_assign_requests()
+            
+            for trial_nbr in 1:10
+
+                    TT = @elapsed new_sol = ruin_recreate(sol)
+                    sum_percentage -= (fit - ECS_objective_function(new_sol)) / fit
+                    cpu_time += TT
+            end
+
+        end
+        empty!(df)
+        push!(df, [ruin_depth, sum_percentage / (length(scenario_list) * trial_nbr), cpu_time / (length(scenario_list) * trial_nbr)])
+        CSV.write(results_save_path, df, append=true)
+    end
+    
+end
+

@@ -280,13 +280,17 @@ function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bo
             isnothing(start) ? push!(feasible_paths_ranges, Int[]) : push!(feasible_paths_ranges, collect(start:last))
         end
         requests_list.fp = feasible_paths_ranges
-        sc = Scenario(id, requests_list, afp, Array{Station,1}(), 0)
-
+        
+        stations = [Station(get_potential_locations()[i], 0, 0) for i in eachindex(get_potential_locations())]
+        sc = Scenario(id, requests_list, afp, stations, 0)
+        
+        
         # save the file
         !isdir(dirname(serialized_file)) && mkpath(dirname(serialized_file))
         serialize(serialized_file, sc)
     end
 
+    
     #return the scenario
     sc
 end
@@ -548,6 +552,7 @@ end
     scenario.revenue += req.Rev
 
 end
+
 ############################### Genrale functions ###############################
 function start_driving(station::Station, car_id::Int64)
     car_indx = findfirst(station.cars.car_id .== car_id)

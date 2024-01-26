@@ -57,13 +57,13 @@ end
 
 ##### Neighborhood functions #####
 function sample_neighbor(sol::Solution, β::Float64=0.5)::Solution
-
-    if rand(rng) < β
+    return ruin_recreate(sol)
+    #= if rand(rng) < β
         return open_station_neighborhood(sol)
     else
         #return close_station_neighborhood(sol)
         return close_station_neighborhood_new(sol)
-    end
+    end =#
 
 end
 
@@ -136,7 +136,7 @@ function close_station_neighborhood(sol::Solution)
     if !online_request_serving
         # step 3: get the requests List to lost
 
-        lost_requests = clean_up_trips!(neigh_sol, scenario_list, station_to_close)
+        lost_requests = clean_up_trips!(neigh_sol, scenario_list, [station_to_close])
 
         # step 4: reassign the lost requests if we can
         assigne_requests!(neigh_sol, scenario_list, lost_requests)
@@ -148,25 +148,26 @@ end
 
 ##### Utils functions #####
 
-function clean_up_trips!(sol::Solution, scenario_list::Array{Scenario,1}, station_id::Int64)
+function clean_up_trips!(sol::Solution, scenario_list::Array{Scenario,1}, stations_list::Vector{Int64})
     #save_sol(sol, "sol_error_before_clean_up.jls")
     #= @info  "clean up station $station_id" =#
-
+    
     unseleceted_requests = Vector{Vector{Int64}}()
-    station_node_id = get_potential_locations()[station_id]
+    stations_node_ids = get_potential_locations()[stations_list]
 
     for scenario in scenario_list
         # scenario = scenario_list[1];
         # get requests to lost and unselect their trips
-        trips = filter(x -> x.origin_station == station_node_id ||
-                x.destination_station == station_node_id,
+        trips = filter(x -> x.origin_station ∈ stations_node_ids ||
+                x.destination_station ∈ stations_node_ids,
             scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :])
 
         curr_scenario_requests_to_lost = trips.req
         sol.selected_paths[scenario.scenario_id][trips.fp_id] .= false
-
+        
         # Second check: if a car which start from station is used to serve a request in other station
-        stations_to_recheck = map(x -> locations_dict[x], filter(x -> x != station_node_id, union(trips.origin_station, trips.destination_station)))
+        stations_to_recheck = map(x -> locations_dict[x], filter(x -> x ∉ stations_node_ids, union(trips.origin_station, trips.destination_station)))
+        
         for station_id in stations_to_recheck
             # station_id = stations_to_recheck[6]
             additional_station_to_recheck, requests_to_lost_from_station = recheck_station!(sol, scenario, station_id)
