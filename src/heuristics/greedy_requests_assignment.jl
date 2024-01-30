@@ -1,5 +1,6 @@
 export greedy_assign_requests
 global adjacent_stations
+global ruin_depth = 0.012 # the percentage of stations to be closed
 
 function fill_adjacent_stations()
     # for each station: get a list od the station sorted by their distance
@@ -168,15 +169,20 @@ end
 
 
 ############ Ruin procedure ##########################
-global ruin_depth = 0.1
 
 function adjacent_ruin!(sol::Solution)
-    #global variables
+    # global variables
     global rng
     global adjacent_stations
     global scenario_list
 
     open_stations = findall(sol.open_stations_state)
+    
+    if length(open_stations) == 0
+        # all the stations are closed so we can not close any station
+        return
+    end
+
     # calculate the number of stations to be closed
     n_stations_to_close = calculate_station_to_close(sol)
     
@@ -194,45 +200,47 @@ function adjacent_ruin!(sol::Solution)
             push!(stations_to_close, adj_st)
             closed_stations_counter += 1
         end
+        
         #check if we heve already closed engough stations
         if closed_stations_counter == n_stations_to_close
             break
         end
     end
-    
     #clean the requests assignments
     clean_up_trips!(sol, scenario_list, stations_to_close)
-
+    
 end
 
 function calculate_station_to_close(sol)
     global ruin_depth
-    max_length = round(Int64, length(findall(sol.open_stations_state)) * ruin_depth)
+    max_length = round(Int64, length(findall(sol.open_stations_state)) * ruin_depth) + 1
+    
     return rand(rng, 1:max_length)
 end
 
 ############ Recreate procedure #######################
 
 function greedy_recreate!(sol)
-    
+    #sol = load_sol("sol_before.jls")
+    #save_sol(sol, "sol.jls")
     global scenario_list
+    global request_feasible_trips_ids
     γ = 0.1 # the blink probability
 
     #get unserved requests
     unserved_requests = get_unserved_requests(sol, scenario_list)
-    sort!(unserved_requests, [:Rev], rev=true)
-    
+    sort!(unserved_requests, [:Rev], rev=true, alg=InsertionSort)
+  
     for req in eachrow(unserved_requests) 
-        #req = unserved_requests[22, :]
         #get origin stations for the request
-        curr_req_trips = scenario_list[req.scenario_id].feasible_paths[req.fp, :]
+        request_trips_ids = request_feasible_trips_ids[req.scenario_id][req.reqId] 
+        curr_req_trips = scenario_list[req.scenario_id].feasible_paths[request_trips_ids, :]
         scenario = scenario_list[req.scenario_id]
 
         #get list of origin stations
         origin_stations_ids = unique([locations_dict[x] for x in curr_req_trips.origin_station])
         destination_stations_ids = unique([locations_dict[x] for x in curr_req_trips.destination_station])
 
-        get_potential_locations()[destination_stations_ids]
         # step 1: select an origin station
         origin_open_stations = origin_stations_ids[findall(sol.open_stations_state[origin_stations_ids])]
         origin_can_serve, origin_new_cars, origin_station = false, -1, -1
@@ -243,16 +251,19 @@ function greedy_recreate!(sol)
         origin_open_stations = origin_open_stations[origin_station_order]
         
         for ost in origin_open_stations
+            # ost = origin_open_stations[2]
             #the blink mechanism
             if rand(rng) < γ
                 continue
             end
             trip_id = findfirst(x -> x.origin_station == get_potential_locations()[ost], eachrow(curr_req_trips))
             trip = curr_req_trips[trip_id, :]
-
+            
             origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, ost, trip)
+            
             if origin_can_serve 
                 origin_station = ost
+                
                 #break
                 if  origin_new_cars == sol.initial_cars_number[ost]
                     #here we are sure that this is the best
@@ -260,7 +271,7 @@ function greedy_recreate!(sol)
                 end
             end
         end
-
+        
         if !origin_can_serve
             #we can not serve the request from an open a station
             #try to open new station
@@ -296,14 +307,16 @@ function greedy_recreate!(sol)
         destination_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in destination_open_stations]
         destination_station_order = sortperm([destination_stations_bounds[i][2] - destination_stations_bounds[i][1] for i in eachindex(destination_stations_bounds)], rev=true)
         destination_open_stations = destination_open_stations[destination_station_order]
-        for dst in destination_open_stations
+        
+        for st in destination_open_stations
+            # st = destination_open_stations[1]
             #the blink mechanism
             if rand(rng) < γ
                 continue
             end
-
+          
             trip_id = findfirst(x -> x.origin_station == get_potential_locations()[origin_station] &&
-                                    x.destination_station == get_potential_locations()[dst], eachrow(curr_req_trips))
+                                    x.destination_station == get_potential_locations()[st], eachrow(curr_req_trips))
             
             if isnothing(trip_id)
                 #there is no feasible path origin and dst stations
@@ -312,11 +325,13 @@ function greedy_recreate!(sol)
 
             trip = curr_req_trips[trip_id, :]
 
-            destination_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, dst, trip)
+            
+            destination_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, st, trip)
+           
             if destination_can_serve 
-                destination_station = dst
+                destination_station = st
                 #break
-                if  destination_new_cars < sol.initial_cars_number[dst]
+                if  destination_new_cars < sol.initial_cars_number[st]
                     #here we are sure that this is the best
                     break
                 end
@@ -344,7 +359,7 @@ function greedy_recreate!(sol)
                                     x.destination_station == get_potential_locations()[st], eachrow(curr_req_trips))
                     if isnothing(trip_id)
                         #there is no feasible path origin and dst stations
-                        @info "no feasible path origin and dst stations"
+                        #@info "no feasible path origin and dst stations"
                         continue
                     end
 
@@ -352,41 +367,45 @@ function greedy_recreate!(sol)
                     break
                 end
             end
-            
         end
 
         if !destination_can_serve
             #we can not serve the request from the destination stations either by already open stations or by opening a new station
             continue
         end
-
         
-        #here we can serve the request
+        
+        # here we can serve the request
+
         sol.open_stations_state[origin_station] = true
         sol.initial_cars_number[origin_station] = origin_new_cars
         sol.open_stations_state[destination_station] = true
         sol.initial_cars_number[destination_station] = destination_new_cars
-
+        
         trip_id = findfirst(x -> x.origin_station == get_potential_locations()[origin_station] && x.destination_station == get_potential_locations()[destination_station], eachrow(curr_req_trips))
         #println("$(req.reqId), $origin_station, $destination_station")
         sol.selected_paths[req.scenario_id][curr_req_trips.fp_id[trip_id]] = true
+        #@info " we set the requests $(curr_req_trips.req[trip_id]) to true"
+        
     end
     
     return sol
 end
 
 function get_unserved_requests(sol::Solution, scenario_list::Vector{Scenario})
-    
+    global feasible_requests_masks
+
     unserved_requests = []
 
     for scenario in scenario_list
-        scenario.request_list.fp = request_feasible_trips_ids[scenario.scenario_id]
-        served_requests_ids = scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :].req
-        curr_sc_unserved_reqs = filter(x -> x.reqId ∉ served_requests_ids, scenario.request_list)
-        filter!(x -> !isempty(x.fp), curr_sc_unserved_reqs)
-        curr_sc_unserved_reqs.scenario_id .= scenario.scenario_id
-        push!(unserved_requests, curr_sc_unserved_reqs)
-        
+
+        curr_sc_served_requests_mask = falses(nrow(scenario.request_list))
+        curr_sc_served_requests_mask[scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :].req] .= true
+    
+        curr_sc_unserved_requests_ids = findall(xor.(feasible_requests_masks[scenario.scenario_id], curr_sc_served_requests_mask))
+        curr_sc_unserved_requests = scenario.request_list[curr_sc_unserved_requests_ids, :]
+        curr_sc_unserved_requests.scenario_id .= scenario.scenario_id
+        push!(unserved_requests, curr_sc_unserved_requests)
     end
 
     return hcat(unserved_requests...)

@@ -51,6 +51,8 @@ global trips_to_unselect_lock = ReentrantLock()
 global stations_capacity = [get_prop(manhaten_city_driving_graph, potential_locations[i], :max_number_of_charging_points) for i in eachindex(get_potential_locations())]
 
 global request_feasible_trips_ids = []
+global station_trips_ids = []
+global feasible_requests_masks = []
 ############################### Multi threading ##################################
 
 function E_carsharing_sim(sol::Solution)
@@ -132,7 +134,7 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
                                   station.max_number_of_charging_points * station.charging_point_cost_fast
                                   for station in scenario.stations[sol.open_stations_state]])
                                     
-       
+                                   
         return scenario.revenue - (total_cars_cost + total_station_cost) / cost_factor
     end
 end
@@ -169,7 +171,6 @@ end
 function initialize_sim(sol::Solution, scenario::Scenario)
     
     if isempty(scenario.stations)
-        scenario.revenue = 0.0
         #set the stations
         car_id = 1
         for i in eachindex(sol.open_stations_state)
@@ -240,8 +241,11 @@ function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_sce
         number_of_requests_per_scenario = nbr_requests_per_scenario
     end
     global scenario_list = [initialize_scenario(scenarios_paths[scenario_idx[i]], i) for i in eachindex(scenario_idx)]
-
+    
+    fill_adjacent_stations()
     set_trips_to_requets_var()
+    set_feasible_requests_masks()
+    
 end
 
 function initialize_scenario(scenario_path::String, id::Int64=-1; check_file::Bool=true)
@@ -439,6 +443,7 @@ end
     # drop the car
     print_simulation && println("Customer [", req.reqId, "]: drop the car off at the station ", potential_locations[drop_off_station_id], " at ", now(env))
     drop_car(drop_off_station, selected_car_id, parking_place_id, now(env))
+    
     # make the payment
     scenario.revenue += req.Rev
 
@@ -485,7 +490,9 @@ end
         else
             #we couldn't serve the request there is no feasible path
             # the cause message
+            cause_message = ""
             if print_simulation
+
                 if (pickup_station_id == -1 || drop_off_station_id == -1)
                     #there is no feasible path for the request
                     cause_message = "there is no feasible path"
@@ -496,7 +503,7 @@ end
                 end
             end
 
-            print_simulation && println("Customer [$(req.reqId)]: We can not serve the request there is no feasible path ($cause_message)")
+           print_simulation && println("Customer [$(req.reqId)]: We can not serve the request there is no feasible path ($cause_message)")
         end
     end
 
@@ -938,4 +945,3 @@ function ECS_objective_function(sol::Solution)
     
     return -1 * (revenues / length(scenario_list) - (total_cars_cost + total_station_cost) / cost_factor)
 end
-

@@ -614,12 +614,30 @@ end
 
 function set_trips_to_requets_var()
     global request_feasible_trips_ids = []
-
+    global scenario_list
+    global station_trips_ids = []
+    
     for scenario in scenario_list
         fp = [Int[] for _ in eachindex(scenario.request_list.reqId)]
+        curr_scenario_station_trips_ids = [Int[] for _ in eachindex(get_potential_locations())]
         for i in eachindex(scenario.feasible_paths.req)
-            push!(fp[scenario.feasible_paths.req[i]], i)
+            trip = scenario.feasible_paths[i, :]
+            origin_station_id, destination_station_id = locations_dict[trip.origin_station], locations_dict[trip.destination_station]
+
+            push!(fp[trip.req], i)
+            push!(curr_scenario_station_trips_ids[origin_station_id], i)
+            push!(curr_scenario_station_trips_ids[destination_station_id], i)
         end
         push!(request_feasible_trips_ids, fp)
+        push!(station_trips_ids, curr_scenario_station_trips_ids)
+    end
+
+end
+
+function set_feasible_requests_masks()
+    global feasible_requests_masks = []
+    for scenario in scenario_list
+        curr_scenario_feasible_requests_mask = [isempty(x.fp) ? false : true for x in eachrow(scenario.request_list)]
+        push!(feasible_requests_masks, curr_scenario_feasible_requests_mask)
     end
 end

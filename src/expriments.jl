@@ -752,11 +752,14 @@ function solve_single_scenario_using_GRA()
 
 end
 
-function ruin_depth()
+function ruin_depth_exp()
     global ruin_depth
+    global rng
 
-    ruin_depth_list = collect(0.02:0.02:0.8)
-    trial_nbr = 10
+    seed = 1905
+ 
+    ruin_depth_list = collect(0.005:0.001:0.015)
+    trial_nbr = 1
     scenario_list_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     
     # the folder where the results will be stored
@@ -770,22 +773,33 @@ function ruin_depth()
     CSV.write(results_save_path, df)# write the header
  
     fill_adjacent_stations()
-    
+    #fill in the list of solutions
+    rng = MersenneTwister(seed)
+    solution_list = []
+    for sc in scenario_list_ids
+        initialize_scenarios([sc])
+        push!(solution_list, [generate_random_solution() for _ in 1:trial_nbr])
+    end
+
     for rd in ruin_depth_list
-        
+        @info "we are trying ruin depth = $rd"
         ruin_depth = rd
         sum_percentage = 0.0
         cpu_time = 0.0
         
         for sc in scenario_list_ids
             initialize_scenarios([sc])
-            sol, fit, _= greedy_assign_requests()
             
-            for trial_nbr in 1:10
-
-                    TT = @elapsed new_sol = ruin_recreate(sol)
-                    sum_percentage -= (fit - ECS_objective_function(new_sol)) / fit
-                    cpu_time += TT
+            opt_path = "Data/MIP/solutions/E_carsharing_mip_scenario_$(sc)_requests_1000_walking_time_5.jls"
+            fit = ECS_objective_function(load_sol(opt_path))
+            
+            for tr in 1:trial_nbr
+                    sol = solution_list[sc][tr]
+                    
+                    sa_sol, sa_fit, sa_cpu = simulated_annealing(sol, 796.0, 1.0, 0.98, 82, 0.8)
+                    
+                    sum_percentage += (fit - sa_fit) / fit
+                    cpu_time += sa_cpu
             end
 
         end
