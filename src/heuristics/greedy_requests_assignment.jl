@@ -1,6 +1,7 @@
 export greedy_assign_requests
 global adjacent_stations
 global ruin_depth = 0.012 # the percentage of stations to be closed
+global γ = 0.1 # the blink probability
 
 function fill_adjacent_stations()
     # for each station: get a list od the station sorted by their distance
@@ -12,6 +13,11 @@ function fill_adjacent_stations()
     end
     #delete the first column
     adjacent_stations = adjacent_stations[:, 2:end]
+    
+    #= for i in 1:length(get_potential_locations())
+        adjacent_stations[i, :] = shuffle(adjacent_stations[i, :])
+    end =#
+
 end
 
 function greedy_assign_requests()
@@ -167,7 +173,6 @@ function get_station_total_cost(station::Station)
     return total_cost
 end
 
-
 ############ Ruin procedure ##########################
 
 function adjacent_ruin!(sol::Solution)
@@ -206,6 +211,7 @@ function adjacent_ruin!(sol::Solution)
             break
         end
     end
+    
     #clean the requests assignments
     clean_up_trips!(sol, scenario_list, stations_to_close)
     
@@ -221,17 +227,18 @@ end
 ############ Recreate procedure #######################
 
 function greedy_recreate!(sol)
-    #sol = load_sol("sol_before.jls")
+    #sol = load_sol("sol.jls")
     #save_sol(sol, "sol.jls")
     global scenario_list
     global request_feasible_trips_ids
-    γ = 0.1 # the blink probability
-
+    global γ = 0. # the blink probability
+    
     #get unserved requests
     unserved_requests = get_unserved_requests(sol, scenario_list)
     sort!(unserved_requests, [:Rev], rev=true, alg=InsertionSort)
-  
+    
     for req in eachrow(unserved_requests) 
+        #req = unserved_requests[91, :]
         #get origin stations for the request
         request_trips_ids = request_feasible_trips_ids[req.scenario_id][req.reqId] 
         curr_req_trips = scenario_list[req.scenario_id].feasible_paths[request_trips_ids, :]
@@ -251,7 +258,6 @@ function greedy_recreate!(sol)
         origin_open_stations = origin_open_stations[origin_station_order]
         
         for ost in origin_open_stations
-            # ost = origin_open_stations[2]
             #the blink mechanism
             if rand(rng) < γ
                 continue
@@ -259,14 +265,24 @@ function greedy_recreate!(sol)
             trip_id = findfirst(x -> x.origin_station == get_potential_locations()[ost], eachrow(curr_req_trips))
             trip = curr_req_trips[trip_id, :]
             
-            origin_can_serve, origin_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, ost, trip)
+            this_st_can_serve, this_st_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, ost, trip)
             
-            if origin_can_serve 
+            if !origin_can_serve && this_st_can_serve
+                origin_can_serve = true
                 origin_station = ost
-                
-                #break
-                if  origin_new_cars == sol.initial_cars_number[ost]
-                    #here we are sure that this is the best
+                origin_new_cars = this_st_new_cars
+
+                #if this station can serve and we gained in terms of cars number so this is the best alternative
+                if this_st_new_cars == sol.initial_cars_number[ost]
+                    #accept directly this station
+                    break
+                end
+            elseif this_st_can_serve 
+                #here we found befor a feasible station, however we have to increament number of cars 
+                # so we need to check if selecting this stations is better "accepted when no need to increament the cars number"
+                if this_st_new_cars == sol.initial_cars_number[ost]
+                    origin_station = ost
+                    origin_new_cars = this_st_new_cars
                     break
                 end
             end
@@ -283,10 +299,12 @@ function greedy_recreate!(sol)
                 origin_closed_stations = origin_closed_stations[sortperm(stations_cost)]
 
                 for st in origin_closed_stations
+                    
                     # the blink mechanism
                     if rand(rng) < γ
                         continue
                     end
+
                     #no need to check if we can serve the trip as we are opening a new station
                     origin_can_serve, origin_station, origin_new_cars = true, st, 1
                     break
@@ -298,7 +316,7 @@ function greedy_recreate!(sol)
             #we can not serve the request from the origin stations either by already open stations or by opening a new station
             continue
         end
-
+        
         #step 2: select a destination station
         destination_open_stations = destination_stations_ids[findall(sol.open_stations_state[destination_stations_ids])]
         destination_can_serve, destination_new_cars, destination_station = false, -1, -1
@@ -309,7 +327,6 @@ function greedy_recreate!(sol)
         destination_open_stations = destination_open_stations[destination_station_order]
         
         for st in destination_open_stations
-            # st = destination_open_stations[1]
             #the blink mechanism
             if rand(rng) < γ
                 continue
@@ -325,14 +342,24 @@ function greedy_recreate!(sol)
 
             trip = curr_req_trips[trip_id, :]
 
-            
-            destination_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, st, trip)
+            this_st_can_serve, this_st_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, st, trip)
            
-            if destination_can_serve 
+            if !destination_can_serve && this_st_can_serve
+                #temporally accept this station
+                destination_can_serve = true
                 destination_station = st
-                #break
-                if  destination_new_cars < sol.initial_cars_number[st]
-                    #here we are sure that this is the best
+                destination_new_cars = this_st_new_cars
+
+                if this_st_new_cars < sol.initial_cars_number[st]
+                    #accept directly current station
+                    break
+                end
+            elseif this_st_can_serve 
+                # here we found befor a feasible station, however we did not gain cars
+                # so we need to check if selecting this stations is better "accepted when no need to decrease the cars number"
+                if this_st_new_cars == sol.initial_cars_number[st]
+                    destination_station = st
+                    destination_new_cars = this_st_new_cars
                     break
                 end
             end
@@ -385,20 +412,17 @@ function greedy_recreate!(sol)
         trip_id = findfirst(x -> x.origin_station == get_potential_locations()[origin_station] && x.destination_station == get_potential_locations()[destination_station], eachrow(curr_req_trips))
         #println("$(req.reqId), $origin_station, $destination_station")
         sol.selected_paths[req.scenario_id][curr_req_trips.fp_id[trip_id]] = true
-        #@info " we set the requests $(curr_req_trips.req[trip_id]) to true"
-        
     end
-    
     return sol
 end
 
 function get_unserved_requests(sol::Solution, scenario_list::Vector{Scenario})
     global feasible_requests_masks
-
+    
     unserved_requests = []
 
     for scenario in scenario_list
-
+        #scenario = scenario_list[2];
         curr_sc_served_requests_mask = falses(nrow(scenario.request_list))
         curr_sc_served_requests_mask[scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :].req] .= true
     
@@ -408,7 +432,7 @@ function get_unserved_requests(sol::Solution, scenario_list::Vector{Scenario})
         push!(unserved_requests, curr_sc_unserved_requests)
     end
 
-    return hcat(unserved_requests...)
+    return vcat(unserved_requests...)
    
 end
 

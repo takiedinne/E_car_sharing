@@ -440,7 +440,6 @@ function check_the_influence_of_the_defferences_with_hatice_preprocessing()
     CSV.write(results_save_path, results)
 end
 
-
 """ 
     As the previous experiment, we seek to see the number of accessible requests 
     as a function of Number of scenarios and maximum walking time.
@@ -508,7 +507,6 @@ function preprocessing_experiment2019()
     results_as_df
 end
 
-
 function solve_single_scenario_using_gurobi()
     #list of parameters
     scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -525,12 +523,10 @@ function solve_single_scenario_using_gurobi()
     results_save_path = string(result_folder_for_this_experiment, "/single_scenarios_MIP_Gurobi_", now(), ".csv")
 
     # parameters for the experiments    
-    results_as_df = DataFrame(S_id=Int64[], β_w=[], PF_Opt=[], J_bar=Int64[], K_bar=Int64[], solver_time=[], total_time=[], terminal_status=[])
+    results_as_df = DataFrame(S_id=Int64[], β_w=[], PF_Opt=[], solver_time=[], total_time=[], terminal_status=[])
 
     for (sc_id, wt) in Iterators.product(scenario_list, walking_time_list)
-
-        @info "[Ci MIP experiment 2019]: scenario N° $sc_id walking time = $wt"
-
+        
         #set the  global variables 
         global maximum_walking_time = wt
 
@@ -538,11 +534,10 @@ function solve_single_scenario_using_gurobi()
         mip_file_path = project_path("Data/MIP/programs_file/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).mof.json")
         sol_file_path = project_path("Data/MIP/solutions/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).jls")
 
+        scenarios = initialize_scenarios([sc_id])
         TT = @elapsed begin
             #prepare the scenarios
-            #@info "inititialize scenarios ..."
-            scenarios = initialize_scenarios([sc_id])
-
+            
             # solve using MIP solver 
             #@info "solving the scenarios ..."
             obj, sol, cpu_time, solver_ter_state = solve_using_mixed_integer_program(scenarios, mip_file_path=mip_file_path)
@@ -551,7 +546,7 @@ function solve_single_scenario_using_gurobi()
         if obj == Inf
             push!(results_as_df, [ns, nr, wt, obj, missing, missing, cpu_time, TT])
         else
-            push!(results_as_df, [sc_id, wt, obj, sum(sol.open_stations_state), sum([sum(sol.selected_paths[i]) for i in eachindex(scenarios)]), cpu_time, TT, solver_ter_state])
+            push!(results_as_df, [sc_id, wt, obj, cpu_time, TT, solver_ter_state])
 
             #save the sol file
             serialize(sol_file_path, sol)
@@ -561,16 +556,16 @@ function solve_single_scenario_using_gurobi()
     results_as_df
 end
 
-
 function solve_single_scenario_using_SA()
     #global variables experiment related variables
     global rng
     trial_nbr = 10
     main_seed = 1905
 
+    rng = MersenneTwister(main_seed)
     #variables related to simulated simulated_annealing
-    T, T₀, I, α, β = 796.0, 20.0, 82, 0.98, 0.8
-
+    #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
+    T, T₀, I, α, β = 100.0, 10.0, 25, 0.98, 0.8
     #scenario parameters
     scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     walking_time_list = [5]
@@ -580,13 +575,13 @@ function solve_single_scenario_using_SA()
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
-    results_save_path = string(result_folder_for_this_experiment, "/single_scenario_SA_", now(), ".csv")
+    results_save_path = string(result_folder_for_this_experiment, "/SA_ruin_recreate", now(), ".csv")
 
-    df = DataFrame(scenario_id=Int64[], trial_id=Int64[], sa_obj=[], cpu_time=[])
+    df = DataFrame(scenario_id=Int64[], sa_obj=[], best_fit=[], cpu_time=[], mean_gap=[], best_gap=[])
     CSV.write(results_save_path, df)# write the header
 
     for (sc_id, wt) in Iterators.product(scenario_list, walking_time_list)
-
+        
         @info "[ECS using SA]: scenario N° $sc_id walking time = $wt"
 
         #set the  global variables 
@@ -597,14 +592,29 @@ function solve_single_scenario_using_SA()
         #global request_feasible_trips_ids = [] #to get feasible trips for req i on scenario s : request_feasible_trips_ids[s][i]
 
         initial_solutions = [generate_random_solution() for _ in 1:trial_nbr]
-
+        opt_sol_path = project_path("Data/MIP/solutions/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).jls")
+        opt_sol = load_sol(opt_sol_path)
+        global opt_fit = ECS_objective_function(opt_sol)
+        
+        best_fit = Inf
+        fit = 0.0
+        cpu_time = 0.0
         for i in 1:trial_nbr
             rng = MersenneTwister(main_seed + i)
             _, obj, sa_cpu = simulated_annealing(initial_solutions[i], T, T₀, α, I, β)
-            empty!(df)
-            push!(df, [sc_id, i, obj, sa_cpu])
-            CSV.write(results_save_path, df, append=true)
+            fit += obj
+            cpu_time += sa_cpu
+            if obj < best_fit
+                best_fit = obj
+            end
         end
+        mean_gap = round((fit / trial_nbr - opt_fit) / opt_fit * 100, digits=3)
+        best_gap = round((best_fit - opt_fit) / opt_fit * 100, digits=3)
+        mean_fit = round(fit / trial_nbr, digits=3)
+        mean_cpu_time = round(cpu_time / trial_nbr, digits=3)
+        empty!(df)
+        push!(df, [sc_id, mean_fit, best_fit, mean_cpu_time, mean_gap, best_gap])
+        CSV.write(results_save_path, df, append=true)
 
     end
 
@@ -669,7 +679,6 @@ function SA_get_T0()
 
     return T
 end
-
 
 function get_acceptance_rate(T)
     sc_id = 7
@@ -810,3 +819,76 @@ function ruin_depth_exp()
     
 end
 
+
+function blink_mechanism_exp()
+
+    #global variables experiment related variables
+    global rng
+    global γ
+
+    trial_nbr = 10
+    main_seed = 1905
+
+    rng = MersenneTwister(main_seed)
+    #variables related to simulated simulated_annealing
+    #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
+    T, T₀, I, α, β = 100.0, 10.0, 25, 0.98, 0.8
+    #scenario parameters
+    scenario_list_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    walking_time_list = [5]
+
+    γ_list = #= collect(0.05:0.05:1.) =# [0.0]
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/gamma_exp")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment, "/gamma_influence", now(), ".csv")
+
+    df = DataFrame(γ=[], mean_gap=[], cpu_time=[])
+    CSV.write(results_save_path, df)# write the header
+    for γ_val in γ_list
+        gap = 0.0
+        total_cpu_time = 0.0
+        γ = γ_val
+        
+        for (sc_id, wt) in Iterators.product(scenario_list_ids, walking_time_list)
+            
+            @info "[ECS using SA]: scenario N° $sc_id walking time = $wt gamma = $γ_val"
+
+            #set the  global variables 
+            global maximum_walking_time = wt
+
+            #initialize the scenario:
+            initialize_scenarios([sc_id])
+            #global request_feasible_trips_ids = [] #to get feasible trips for req i on scenario s : request_feasible_trips_ids[s][i]
+
+            initial_solutions = [generate_random_solution() for _ in 1:trial_nbr]
+            opt_sol_path = project_path("Data/MIP/solutions/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).jls")
+            opt_sol = load_sol(opt_sol_path)
+            global opt_fit = ECS_objective_function(opt_sol)
+            
+            best_fit = Inf
+            fit = 0.0
+            cpu_time = 0.0
+            for i in 1:trial_nbr
+                rng = MersenneTwister(main_seed + i)
+                _, obj, sa_cpu = simulated_annealing(initial_solutions[i], T, T₀, α, I, β)
+                fit += obj
+                cpu_time += sa_cpu
+                if obj < best_fit
+                    best_fit = obj
+                end
+            end
+            gap  += round((fit / trial_nbr - opt_fit) / opt_fit * 100, digits=3)
+            total_cpu_time += round(cpu_time / trial_nbr, digits=3)
+        end
+
+        gap = gap / length(scenario_list) / length(walking_time_list)
+        total_cpu_time = total_cpu_time / length(scenario_list) / length(walking_time_list)
+        empty!(df)
+        push!(df, [γ_val, gap, total_cpu_time])
+        CSV.write(results_save_path, df, append=true)
+    end
+
+end

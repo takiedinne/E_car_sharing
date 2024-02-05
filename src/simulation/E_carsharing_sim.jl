@@ -32,6 +32,7 @@ global shortest_walking_paths_lock = ReentrantLock()
 global scenario_list = Array{Scenario,1}() # contain all scenario instances as dataframe
 
 global online_selected_paths = Array{Array{Bool,1},1}() #useful for the online mode to see which paths is chosen
+global online_selected_paths_lock = ReentrantLock()
 
 # global variable for trak the used cars
 global used_cars = Array{Int64,1}()
@@ -723,6 +724,9 @@ end
         parking_place_id => the id of the parking place in the drop off station
 """
 function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, current_time)
+    #globalvariables 
+    global online_selected_paths
+    global online_selected_paths_lock
     # vars to return 
     pickup_station_id = nothing
     drop_off_station_id = nothing
@@ -808,7 +812,13 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
         end
 
         # we need to memorize the selected requests in the online mode.
-        global online_selected_paths[scenario.scenario_id][path_id] = true
+        Threads.lock(online_selected_paths_lock)
+        try
+            online_selected_paths[scenario.scenario_id][path_id] = true
+        finally
+            Threads.unlock(online_selected_paths_lock)
+        end
+
         break
     end
 
@@ -918,10 +928,18 @@ function generate_random_solution(; open_stations_number=-1)
 
     set_online_mode(true)
     E_carsharing_sim(sol)
-    sol.selected_paths = deepcopy(online_selected_paths)
-
+    Threads.lock(online_selected_paths_lock)
+    try
+        sol.selected_paths = deepcopy(online_selected_paths)
+    finally
+        Threads.unlock(online_selected_paths_lock)
+    end
+    
     set_online_mode(old_online_serving_value)
     #sol = load_sol("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/Data/other/GIHH_sol.jls")
+    if E_carsharing_sim(sol) > 10000
+        @info "the solution is not feasible befor cleanning up cars"
+    end
     clean_up_cars_number!(sol)
     sol
 
