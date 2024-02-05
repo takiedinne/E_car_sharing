@@ -920,7 +920,7 @@ function clean_up_cars_number!(sol::Solution)
     global used_cars
     
     # the way that the cars are created are basically when we instantiate the stations
-    E_carsharing_sim(sol)
+    
     new_initial_number_of_cars = Array{Int64}(undef, length(sol.initial_cars_number))
     car_id = 1
 

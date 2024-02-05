@@ -3,6 +3,8 @@ global adjacent_stations
 global ruin_depth = 0.012 # the percentage of stations to be closed
 global γ = 0.1 # the blink probability
 
+global use_adjacent_selection = true
+
 function fill_adjacent_stations()
     # for each station: get a list od the station sorted by their distance
     global adjacent_stations = Matrix{Int64}(undef, length(get_potential_locations()), length(get_potential_locations()))
@@ -13,10 +15,11 @@ function fill_adjacent_stations()
     end
     #delete the first column
     adjacent_stations = adjacent_stations[:, 2:end]
-    
-    #= for i in 1:length(get_potential_locations())
-        adjacent_stations[i, :] = shuffle(adjacent_stations[i, :])
-    end =#
+    if !use_adjacent_selection
+        for i in 1:length(get_potential_locations())
+            adjacent_stations[i, :] = shuffle(adjacent_stations[i, :])
+        end
+    end
 
 end
 
@@ -30,9 +33,11 @@ function greedy_assign_requests()
     #get list of feasible requests
     feasible_requests = scenario.request_list[unique(scenario_list[1].feasible_paths.req), [:reqId, :Rev]]
     sort!(feasible_requests, [:Rev], rev=true)
-
-    for req in eachrow(feasible_requests) #= i in 1:21 =#
-        #req = feasible_requests[22, :]
+   #=  i = 1  =#
+    for req in eachrow(feasible_requests)
+        #= @info "i = $i"
+        i +=1 =#
+        #req = feasible_requests[116, :]
         #get origin stations for the request
         curr_req_trips_ids = request_feasible_trips_ids[scenario.scenario_id][req.reqId]
         curr_req_trips = scenario.feasible_paths[curr_req_trips_ids, :]
@@ -66,7 +71,7 @@ function greedy_assign_requests()
         if !origin_can_serve
             #try to open new station
             station_to_open = origin_stations_ids[findall(.!sol.open_stations_state[origin_stations_ids])]
-            start_time = time()
+            
             if !isempty(station_to_open)
                 #there is(are) station(s) open
                 stations_cost = [get_station_total_cost(st) for st in scenario.stations[station_to_open]]
@@ -74,7 +79,7 @@ function greedy_assign_requests()
                 origin_station_order = sortperm(stations_cost)
 
                 for st in station_to_open[origin_station_order]
-                    #st = 34
+                    #st = 53
                     trip_id = findfirst(x -> x.origin_station == get_potential_locations()[st], eachrow(curr_req_trips))
                     trip = curr_req_trips[trip_id, :]
                     sol.open_stations_state[st] = true
@@ -102,7 +107,12 @@ function greedy_assign_requests()
             destination_station_order = sortperm([destination_stations_bounds[i][2] - destination_stations_bounds[i][1] for i in eachindex(destination_stations_bounds)], rev=true)
 
             for st in destination_open_stations[destination_station_order]
-                trip_id = findfirst(x -> x.destination_station == get_potential_locations()[st], eachrow(curr_req_trips))
+                trip_id = findfirst(x -> x.destination_station == get_potential_locations()[st] && 
+                                        x.origin_station == get_potential_locations()[origin_station], eachrow(curr_req_trips))
+                if isnothing(trip_id)
+                    #there is no feasible path origin and dst stations
+                    continue
+                end
                 trip = curr_req_trips[trip_id, :]
                 
                 destination_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, st, trip)
@@ -124,8 +134,13 @@ function greedy_assign_requests()
                 destination_station_order = sortperm(stations_cost)
 
                 for st in station_to_open[destination_station_order]
-                    #st = 6
-                    trip_id = findfirst(x -> x.destination_station == get_potential_locations()[st], eachrow(curr_req_trips))
+                    #st = 23
+                    trip_id = findfirst(x -> x.destination_station == get_potential_locations()[st] && 
+                                            x.origin_station == get_potential_locations()[origin_station], eachrow(curr_req_trips))
+                    if isnothing(trip_id)
+                        #there is no feasible path origin and dst stations
+                        continue
+                    end
                     trip = curr_req_trips[trip_id, :]
                     sol.open_stations_state[st] = true
                     destination_can_serve, destination_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, st, trip)

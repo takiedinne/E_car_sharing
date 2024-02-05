@@ -892,3 +892,69 @@ function blink_mechanism_exp()
     end
 
 end
+
+
+function adjacent_selection_effect()
+    #global variables experiment related variables
+    global rng
+    trial_nbr = 10
+    main_seed = 1905
+
+    #variables related to simulated simulated_annealing
+    #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
+    T, T₀, I, α, β = 100.0, 10.0, 25, 0.98, 0.8
+    #scenario parameters
+    scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    walking_time_list = [5]
+    adjacent_selection_list = [true, false]
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/solve_single_scenario_with_SA")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment, "/SA_ruin_recreate", now(), ".csv")
+
+    df = DataFrame(scenario_id=Int64[], sa_obj=[], best_fit=[], cpu_time=[], mean_gap=[], best_gap=[])
+    CSV.write(results_save_path, df)# write the header
+
+    for (sc_id, wt, as) in Iterators.product(scenario_list, walking_time_list, adjacent_selection_list)
+        
+        @info "[ECS using SA]: scenario N° $sc_id walking time = $wt with $(as ? "adjacent selection" : "random selection")"
+
+        #set the  global variables 
+        global maximum_walking_time = wt
+        
+        rng = MersenneTwister(main_seed)
+        #initialize the scenario:
+        initialize_scenarios([sc_id])
+        #global request_feasible_trips_ids = [] #to get feasible trips for req i on scenario s : request_feasible_trips_ids[s][i]
+
+        initial_solutions = [generate_random_solution() for _ in 1:trial_nbr]
+        opt_sol_path = project_path("Data/MIP/solutions/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).jls")
+        opt_sol = load_sol(opt_sol_path)
+        global opt_fit = ECS_objective_function(opt_sol)
+        
+        best_fit = Inf
+        fit = 0.0
+        cpu_time = 0.0
+        for i in 1:trial_nbr
+            rng = MersenneTwister(main_seed + i)
+            _, obj, sa_cpu = simulated_annealing(initial_solutions[i], T, T₀, α, I, β)
+            fit += obj
+            cpu_time += sa_cpu
+            if obj < best_fit
+                best_fit = obj
+            end
+        end
+        mean_gap = round((fit / trial_nbr - opt_fit) / opt_fit * 100, digits=3)
+        best_gap = round((best_fit - opt_fit) / opt_fit * 100, digits=3)
+        mean_fit = round(fit / trial_nbr, digits=3)
+        mean_cpu_time = round(cpu_time / trial_nbr, digits=3)
+        empty!(df)
+        push!(df, [sc_id, mean_fit, best_fit, mean_cpu_time, mean_gap, best_gap])
+        CSV.write(results_save_path, df, append=true)
+
+    end
+
+end
+

@@ -20,12 +20,9 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
     global best_fitness_list = []
     while τ > τˢ
         for _ in 1:Ι  # Number of iterations at each temperature
-            save_sol(current_solution, "sol.jls")
+           
             neighbor_solution = sample_neighbor(current_solution, β)
-            if E_carsharing_sim(neighbor_solution) > 10000
-                τ = τˢ
-                break 
-            end
+            
             #@info "sa = neighbor_solution = $neighbor_solution"
 
             #clean_up_cars_number!(neighbor_solution)
