@@ -48,6 +48,7 @@ include("analysis.jl")
 include("heuristics/heuristics.jl")
 include("heuristics/simulated_annealing.jl")
 include("heuristics/greedy_requests_assignment.jl")
+include("heuristics/ruin_recreate.jl")
 
 export E_carsharing_sim,
     Solution,

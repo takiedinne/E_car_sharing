@@ -622,45 +622,55 @@ end
 
 function SA_params()
     global rng
-
-    T_list = Float64[1061.95]
-    T0_list = Float64[1.]
+    T_list = collect(Float64,50:10:300)
+    T0_list = Float64[10.]
     α_list = [0.98] #= , 0.99, 0.998 =#
-    I_list = [82]
-    β_list = collect(0.5:0.01:0.9)
+    I_list = collect(5:5:50)
+    scenario_ids_list = [1, 7, 10]
+
+    β_list = [1]
 
     main_seed = 1905
 
-    trial_nbr = 1
+    trial_nbr = 10
     # the folder where the results will be stored
-    result_folder_for_this_experiment = string(results_folder, "/SA_params/Beta")
+    result_folder_for_this_experiment = string(results_folder, "/SA_params/TandT0")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
     results_save_path = string(result_folder_for_this_experiment, "/SA_params", now(), ".csv")
 
     #parameters for the experiments    
-    df = DataFrame(T=Float64[], T0=Float64[], α=Float64[], I=Float64[], β=Float64[], SA_Obj=Float64[], best_SA=Float64[], total_time=Float64[])
-    CSV.write(results_save_path, df) #= , append = true =#
-    #prepare the scenarios
-    #@info "inititialize scenarios ..."
-    initialize_scenarios([1])
-
-    starting_sols = [generate_random_solution() for _ in 1:trial_nbr]
+    df = DataFrame(T=Float64[], T0=Float64[], α=Float64[], I=Float64[], β=Float64[], SA_Obj=Float64[], total_time=Float64[])
+    CSV.write(results_save_path, df) 
+    
     for (T, T0, α, I, β) in Iterators.product(T_list, T0_list, α_list, I_list, β_list)
         @info "T = $T, T0 = $T0, α = $α, I = $I, β = $β"
+        T, T0, α, I, β = 50., 10., 0.98, 5, 1.
+        gap_sum = 0.
+        cpu_time = 0.
+        for sc_id in scenario_ids_list
+            initialize_scenarios([sc_id])
+            opt_sol_path = project_path("Data/MIP/solutions/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_5.jls")
+            opt_sol = load_sol(opt_sol_path)
+            global opt_fit = ECS_objective_function(opt_sol)
 
-        fit = 0.0
-        best_fit = Inf
-        TT = @elapsed for i in 1:trial_nbr
-            rng = MersenneTwister(main_seed + i)
-            _, obj, _ = simulated_annealing(starting_sols[i], T, T0, α, I, β)
-            fit += obj
-            obj < best_fit && (best_fit = obj)
+            rng = MersenneTwister(main_seed)
+            starting_sols = [generate_random_solution() for _ in 1:trial_nbr]
+
+            for i in 1:trial_nbr
+                rng = MersenneTwister(main_seed + i)
+                _, obj, sa_cpu = simulated_annealing(starting_sols[i], T, T0, α, I, β)
+               
+                gap = (obj - opt_fit) / opt_fit * -100
+                gap_sum += gap 
+                cpu_time += sa_cpu
+            end
         end
-
+        mean_gap = gap_sum / (length(scenario_ids_list) * trial_nbr)
+        mean_cpu_time = cpu_time / (length(scenario_ids_list) * trial_nbr)
         empty!(df)
-        push!(df, [T, T0, α, I, β, fit / trial_nbr, best_fit, TT / trial_nbr])
+        push!(df, [T, T0, α, I, β, mean_gap, mean_cpu_time])
         CSV.write(results_save_path, df, append=true)
     end
 end
@@ -908,13 +918,13 @@ function adjacent_selection_effect()
     walking_time_list = [5]
     adjacent_selection_list = [true, false]
     # the folder where the results will be stored
-    result_folder_for_this_experiment = string(results_folder, "/solve_single_scenario_with_SA")
+    result_folder_for_this_experiment = string(results_folder, "/adjacent_effect")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
-    results_save_path = string(result_folder_for_this_experiment, "/SA_ruin_recreate", now(), ".csv")
+    results_save_path = string(result_folder_for_this_experiment, "/adjacent_effect", now(), ".csv")
 
-    df = DataFrame(scenario_id=Int64[], sa_obj=[], best_fit=[], cpu_time=[], mean_gap=[], best_gap=[])
+    df = DataFrame(mode=[],scenario_id=Int64[], trial=Int[], sa_obj=[], cpu_time=[], gap=[])
     CSV.write(results_save_path, df)# write the header
 
     for (sc_id, wt, as) in Iterators.product(scenario_list, walking_time_list, adjacent_selection_list)
@@ -923,7 +933,7 @@ function adjacent_selection_effect()
 
         #set the  global variables 
         global maximum_walking_time = wt
-        
+        global use_adjacent_selection = as
         rng = MersenneTwister(main_seed)
         #initialize the scenario:
         initialize_scenarios([sc_id])
@@ -934,27 +944,18 @@ function adjacent_selection_effect()
         opt_sol = load_sol(opt_sol_path)
         global opt_fit = ECS_objective_function(opt_sol)
         
-        best_fit = Inf
-        fit = 0.0
-        cpu_time = 0.0
+        
         for i in 1:trial_nbr
             rng = MersenneTwister(main_seed + i)
             _, obj, sa_cpu = simulated_annealing(initial_solutions[i], T, T₀, α, I, β)
-            fit += obj
-            cpu_time += sa_cpu
-            if obj < best_fit
-                best_fit = obj
-            end
+            
+            gap = (obj - opt_fit) / opt_fit * -100
+            empty!(df)
+            push!(df, [as, sc_id, i, obj, sa_cpu, gap])
+            CSV.write(results_save_path, df, append=true)
+
         end
-        mean_gap = round((fit / trial_nbr - opt_fit) / opt_fit * 100, digits=3)
-        best_gap = round((best_fit - opt_fit) / opt_fit * 100, digits=3)
-        mean_fit = round(fit / trial_nbr, digits=3)
-        mean_cpu_time = round(cpu_time / trial_nbr, digits=3)
-        empty!(df)
-        push!(df, [sc_id, mean_fit, best_fit, mean_cpu_time, mean_gap, best_gap])
-        CSV.write(results_save_path, df, append=true)
 
     end
 
 end
-
