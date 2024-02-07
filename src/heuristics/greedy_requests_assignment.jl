@@ -11,7 +11,7 @@ function fill_adjacent_stations()
     end
     #delete the first column
     adjacent_stations = adjacent_stations[:, 2:end]
-    @info "adjacent_stations is filled"
+   
     if !use_adjacent_selection
         for i in 1:length(get_potential_locations())
             adjacent_stations[i, :] = shuffle(adjacent_stations[i, :])

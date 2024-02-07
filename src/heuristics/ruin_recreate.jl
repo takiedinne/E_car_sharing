@@ -1,8 +1,8 @@
 export ruin_recreate
 
 global adjacent_stations
-global ruin_depth = 0.012 # the percentage of stations to be closed
-global γ = 0.1 # the blink probability
+global ruin_depth = 0.015 # the percentage of stations to be closed
+global γ = 0.19 # the blink probability
 global use_adjacent_selection = true
 
 ############ Ruin procedure ##########################
@@ -64,9 +64,10 @@ function greedy_recreate!(sol)
     
     #get unserved requests
     unserved_requests = get_unserved_requests(sol, scenario_list)
-    sort!(unserved_requests, [:Rev], rev=true, alg=InsertionSort)
+    sort!(unserved_requests, [:Rev], rev=true)
     
-    for req in eachrow(unserved_requests) 
+    for req in eachrow(unserved_requests)
+        #req = unserved_requests[1, :] 
         #= if rand(rng) < γ
             continue
         end =#
@@ -84,11 +85,12 @@ function greedy_recreate!(sol)
         origin_can_serve, origin_new_cars, origin_station = false, -1, -1
         
         #sort the stations by their ristricted cars bounds
-        origin_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in origin_open_stations]
+        #= origin_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in origin_open_stations]
         origin_station_order = sortperm([origin_stations_bounds[i][2] - origin_stations_bounds[i][1] for i in eachindex(origin_stations_bounds)], rev=true)
         origin_open_stations = origin_open_stations[origin_station_order]
-        
+         =#
         for ost in origin_open_stations
+            #ost = origin_open_stations[1]
             #the blink mechanism
             if rand(rng) < γ
                 continue
@@ -153,10 +155,10 @@ function greedy_recreate!(sol)
         destination_can_serve, destination_new_cars, destination_station = false, -1, -1
         
         #sort the stations by their ristricted cars bounds
-        destination_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in destination_open_stations]
+        #= destination_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in destination_open_stations]
         destination_station_order = sortperm([destination_stations_bounds[i][2] - destination_stations_bounds[i][1] for i in eachindex(destination_stations_bounds)], rev=true)
         destination_open_stations = destination_open_stations[destination_station_order]
-        
+         =#
         for st in destination_open_stations
             #the blink mechanism
             if rand(rng) < γ

@@ -50,7 +50,7 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
             push!(best_fitness_list, best_cost)
         end
         τ *= α
-        @info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
+        #@info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
     end
 
     @info "best_cost = $best_cost, gap = $(round((best_cost - opt_fit )/ opt_fit * 100, digits=2))% time = $( time() - sa_start_time)"
@@ -361,11 +361,14 @@ function get_station_cars_bounds(scenario::Scenario, sol::Solution, station_id::
     station_capacity = stations_capacity[station_id]
 
     #get the list of trips of the scenario where station intervenes 
-    trips = scenario.feasible_paths[station_trips_ids[scenario.scenario_id][station_id], :]
+    trips_ids = station_trips_ids[scenario.scenario_id][station_id][findall(sol.selected_paths[scenario.scenario_id][station_trips_ids[scenario.scenario_id][station_id]])]
+    trips = scenario.feasible_paths[trips_ids, :]
+    #trips = scenario.feasible_paths[station_trips_ids[scenario.scenario_id][station_id], :]
     #trips = filter(x-> sol.selected_paths[1][x.fp_id] && (x.origin_station == station_node_id || x.destination_station == station_node_id),scenario.feasible_paths)
+    
     # for the time order we privilige the trips where the station is the origin station (for that we added .1 to the arriving time)
     trips_interesting_time = [(trip.origin_station == station_node_id) ? trip.start_driving_time : (trip.arriving_time + 0.1) for trip in eachrow(trips)]
-    trips_order = sortperm(trips_interesting_time)
+    trips_order = sortperm(trips_interesting_time, alg=InsertionSort)
 
     # check if the nbr of cars is always positive and less than the station capacity 
     curr_cars_number = sol.initial_cars_number[station_id]
@@ -389,7 +392,7 @@ function get_station_cars_bounds(scenario::Scenario, sol::Solution, station_id::
 end
 
 function can_serve_and_get_cars_number(scenario_list::Vector{Scenario}, scenario_id::Int64, sol::Solution, station_id::Int64, trip::DataFrameRow)::Tuple{Bool,Int64}
-    # scenario_id, station_id = 1, 43
+    # scenario_id, station_id = 1, 4
     #first check if the station is open
     !sol.open_stations_state[station_id] && return (false, -1)
     

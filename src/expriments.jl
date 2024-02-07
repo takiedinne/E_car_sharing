@@ -622,17 +622,18 @@ end
 
 function SA_params()
     global rng
-    T_list = collect(Float64,50:10:300)
+    T_list = collect(Float64,150:2:170)
     T0_list = Float64[10.]
     α_list = [0.98] #= , 0.99, 0.998 =#
-    I_list = collect(5:5:50)
-    scenario_ids_list = [1, 7, 10]
+    I_list = collect(20:2:30)
+    scenario_ids_list = [7]
 
     β_list = [1]
 
     main_seed = 1905
 
-    trial_nbr = 10
+    trial_nbr = 3
+    
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/SA_params/TandT0")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
@@ -772,14 +773,13 @@ function solve_single_scenario_using_GRA()
 end
 
 function ruin_depth_exp()
-    global ruin_depth
-    global rng
-
     seed = 1905
- 
-    ruin_depth_list = collect(0.005:0.001:0.015)
-    trial_nbr = 1
-    scenario_list_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    global ruin_depth
+    global rng = MersenneTwister(seed)
+
+    ruin_depth_list = collect(0.01:0.01:0.3)
+    trial_nbr = 5
+    scenario_list_ids = [#= 1,  =#2, #= 3, 4, 5, 6, =# 7#= , 8, 9, 10 =#]
     
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/ruin_depth")
@@ -793,7 +793,7 @@ function ruin_depth_exp()
  
     fill_adjacent_stations()
     #fill in the list of solutions
-    rng = MersenneTwister(seed)
+    
     solution_list = []
     for sc in scenario_list_ids
         initialize_scenarios([sc])
@@ -806,19 +806,21 @@ function ruin_depth_exp()
         sum_percentage = 0.0
         cpu_time = 0.0
         
-        for sc in scenario_list_ids
+        for i in eachindex(scenario_list_ids)
+            sc = scenario_list_ids[i]
             initialize_scenarios([sc])
             
             opt_path = "Data/MIP/solutions/E_carsharing_mip_scenario_$(sc)_requests_1000_walking_time_5.jls"
             fit = ECS_objective_function(load_sol(opt_path))
-            
+            global opt_fit = fit
             for tr in 1:trial_nbr
-                    sol = solution_list[sc][tr]
-                    
-                    sa_sol, sa_fit, sa_cpu = simulated_annealing(sol, 796.0, 1.0, 0.98, 82, 0.8)
-                    
-                    sum_percentage += (fit - sa_fit) / fit
-                    cpu_time += sa_cpu
+                rng = MersenneTwister(seed + tr)
+                sol = solution_list[i][tr]
+                
+                sa_sol, sa_fit, sa_cpu = simulated_annealing(sol, 300.0, 10.0, 0.98, 35, 0.8)
+                
+                sum_percentage += (fit - sa_fit) / fit
+                cpu_time += sa_cpu
             end
 
         end
@@ -836,24 +838,24 @@ function blink_mechanism_exp()
     global rng
     global γ
 
-    trial_nbr = 10
+    trial_nbr = 5
     main_seed = 1905
 
     rng = MersenneTwister(main_seed)
     #variables related to simulated simulated_annealing
     #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
-    T, T₀, I, α, β = 100.0, 10.0, 25, 0.98, 0.8
+    T, T₀, I, α, β = 300.0, 10.0, 35, 0.98, 0.8
     #scenario parameters
-    scenario_list_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    scenario_list_ids = [1#= , 2, 3, 4, 5, 6, =# 7#= , 8, 9, 10 =#]
     walking_time_list = [5]
 
-    γ_list = #= collect(0.05:0.05:1.) =# [0.0]
+    γ_list = collect(0.1:0.01:0.25)
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/gamma_exp")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
-    results_save_path = string(result_folder_for_this_experiment, "/gamma_influence", now(), ".csv")
+    results_save_path = string(result_folder_for_this_experiment, "/gamma_effect", now(), ".csv")
 
     df = DataFrame(γ=[], mean_gap=[], cpu_time=[])
     CSV.write(results_save_path, df)# write the header
@@ -912,7 +914,7 @@ function adjacent_selection_effect()
 
     #variables related to simulated simulated_annealing
     #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
-    T, T₀, I, α, β = 100.0, 10.0, 25, 0.98, 0.8
+    T, T₀, I, α, β = 300.0, 10.0, 35, 0.98, 0.8
     #scenario parameters
     scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     walking_time_list = [5]
@@ -953,7 +955,6 @@ function adjacent_selection_effect()
             empty!(df)
             push!(df, [as, sc_id, i, obj, sa_cpu, gap])
             CSV.write(results_save_path, df, append=true)
-
         end
 
     end

@@ -57,7 +57,8 @@ global feasible_requests_masks = []
 ############################### Multi threading ##################################
 
 function E_carsharing_sim(sol::Solution)
-    
+    global online_selected_paths
+    # global rng = MersenneTwister(123)
     #check if we did initialize the scenarios
     isempty(scenario_list) &&  @warn "you need to initialize the scenarios !"
     
@@ -108,6 +109,7 @@ function E_carsharing_sim(sol::Solution, scenario_id::Int64)
 
     initialize_sim(sol, scenario) 
 
+   
     if !is_feasible_solution(sol)
         print_simulation && @warn "Error: The solution is not feasible"
         return Inf
@@ -414,7 +416,7 @@ end
     
     #simulate the riding time
     driving_duration > 0 && @yield timeout(env, driving_duration)
-
+    
     #get the available parking places
     available_places_ids = findall(drop_off_station.parking_places.status .== P_FREE)
     if isempty(available_places_ids)
@@ -469,6 +471,7 @@ end
         # if the request can not be served, this function will return -1 in one of the information variables
     
         pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id = get_trip_info_for_request(req, sol, scenario, now(env)) # one row Dataframe
+        
         # check the availabilty of paths to serve the request
         if  !isnothing(selected_car_id) && !isnothing(parking_place_id)
             #book the trip (the car + parking palce ,etc) only for the 
@@ -485,26 +488,28 @@ end
                  pickup_station_id, drop_off_station_id,
                  selected_car_id, parking_place_id, start_driving_time,
                   start_walking_time + walking_duration + driving_duration)
-
+            
             # for the online serving we check all the variables otherwise we have only to check the stations
             @process perform_the_trip_process_online_mode(env, req, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, scenario)
         else
+            
             #we couldn't serve the request there is no feasible path
             # the cause message
             cause_message = ""
             if print_simulation
-
+                
                 if (pickup_station_id == -1 || drop_off_station_id == -1)
                     #there is no feasible path for the request
                     cause_message = "there is no feasible path"
-                elseif selected_car_id == -1
+                elseif isnothing(selected_car_id)
                     cause_message = "there is no available car"
-                elseif parking_place_id == -1
+                elseif isnothing(parking_place_id)
                     cause_message = "there is no parking place"
                 end
             end
 
-           print_simulation && println("Customer [$(req.reqId)]: We can not serve the request there is no feasible path ($cause_message)")
+            print_simulation && println("Customer [$(req.reqId)]: We can not serve the request there is no feasible path ($cause_message)")
+           
         end
     end
 
@@ -513,7 +518,7 @@ end
 @resumable function perform_the_trip_process_online_mode(env::Environment, req::DataFrameRow, pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id, scenario)
     
     pickup_station, drop_off_station = scenario.stations[pickup_station_id], scenario.stations[drop_off_station_id]
-    
+
     #get the different duration for the trip.
     walking_duration = get_walking_time(req.ON, potential_locations[pickup_station_id])
     work_with_time_slot && walking_duration != Inf && (walking_duration = ceil(Int64, walking_duration / time_slot_length))
@@ -555,7 +560,7 @@ end
     print_simulation && println("Customer [", req.reqId, "]: drop the car off at the station ", potential_locations[drop_off_station_id], " at ", now(env))
     #@info "drop_off scenario: $(scenario.scenario_id), request: $(req.reqId)"
     drop_car(drop_off_station, selected_car_id, parking_place_id, now(env))
-
+    
     # make the payment
     scenario.revenue += req.Rev
 
@@ -734,6 +739,7 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
     parking_place_id = nothing
     
     for path_id in req.fp
+        
         path = scenario.feasible_paths[path_id, :]
         # reset the vars to be returned
         selected_car_id = nothing # the id of the car to be used to perform the trip
@@ -805,12 +811,16 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
                 parking_place_id = findfirst(drop_off_station.parking_places.cars 
                                                 .== drop_off_station.cars.car_id[car_to_leave_id] .&&
                                             drop_off_station.parking_places.pending_reservation .== 0)
-            else
-                #the path can not be used because there is no available place
-                continue
             end
+               
+            
         end
-
+       
+        if isnothing(parking_place_id)
+            #the path can not be used because there is no available place
+            continue
+        end
+       
         # we need to memorize the selected requests in the online mode.
         Threads.lock(online_selected_paths_lock)
         try
@@ -821,7 +831,6 @@ function get_trip_info_for_request(req, sol::Solution, scenario::Scenario, curre
 
         break
     end
-
     return (pickup_station_id, drop_off_station_id, selected_car_id, parking_place_id)
 
 end
@@ -869,11 +878,12 @@ function book_trip(pickup_station, drop_off_station, pickup_station_id, drop_off
     #check if the parking place is occupied or resereved ( it will be free by the arriving time)
     if drop_off_station.parking_places.status[parking_place_id] in [P_OCCUPIED, P_RESERVED]
         drop_off_station.parking_places.pending_reservation[parking_place_id] += 1
+        
     else
         # the place is free so we reserved it directely
         drop_off_station.parking_places.status[parking_place_id] = P_RESERVED
     end
-    
+   
     push!(drop_off_station.cars, (pickup_station.cars.car_id[car_indx],
             pickup_station.cars.car_type[car_indx],
             CAR_ON_WAY, 
@@ -883,7 +893,6 @@ function book_trip(pickup_station, drop_off_station, pickup_station_id, drop_off
             0,
             expected_arriving_time)) # copy
 end
-
 
 """
     generate a random solution multi threaded manner:
@@ -900,6 +909,7 @@ function generate_random_solution(; open_stations_number=-1)
 
     global online_request_serving
     global rng
+    global online_selected_paths
 
     sol = Solution()
     potential_locations = get_potential_locations()
@@ -937,10 +947,10 @@ function generate_random_solution(; open_stations_number=-1)
     
     set_online_mode(old_online_serving_value)
     #sol = load_sol("/Users/taki/Desktop/Preparation doctorat ERM/Projects/E_car_sharing/Data/other/GIHH_sol.jls")
-    if E_carsharing_sim(sol) > 10000
+    #= if E_carsharing_sim(sol) > 10000
         @info "the solution is not feasible befor cleanning up cars"
     end
-    clean_up_cars_number!(sol)
+    clean_up_cars_number!(sol) =#
     sol
 
 end
