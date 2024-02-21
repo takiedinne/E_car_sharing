@@ -248,6 +248,7 @@ function initialize_scenarios(scenario_idx::Array{Int64,1}; nbr_requests_per_sce
     fill_adjacent_stations()
     set_trips_to_requets_var()
     set_feasible_requests_masks()
+    #fill_adjacent_requests()
     
 end
 
@@ -682,7 +683,7 @@ function is_feasible_solution(sol::Solution)
 
     #check the initial number of cars (constraint 7 and 8)
     capacity_mask = sol.open_stations_state .* stations_capacity
-    if sol.initial_cars_number > capacity_mask 
+    if !isempty(findall(sol.initial_cars_number .> capacity_mask) )
         print_simulation && println("the initial number of cars in the station ", potential_locations[i], " is greater the the total allowed number (or a stations contains cars despite it is closed")
         failed[] = true
         return false

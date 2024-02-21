@@ -4,7 +4,7 @@ global opt_fit = 1
 global sort_stations = false
 global best_fitness_list = []
 
-function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, τˢ::Float64=1.1, α::Float64=0.98, Ι::Int64=82, β::Float64=0.5)
+function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, τˢ::Float64=10., α::Float64=0.98, Ι::Int64=35, β::Float64=0.5)
     #global rng = MersenneTwister(1234)
     # initial_solution = generate_random_solution()
     #τ⁰, τˢ, α, Ι, β = 1061.95, 1.06, 0.98, 30, .8
@@ -50,7 +50,7 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=329.0, �
             push!(best_fitness_list, best_cost)
         end
         τ *= α
-        #@info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
+        @info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
     end
 
     @info "best_cost = $best_cost, gap = $(round((best_cost - opt_fit )/ opt_fit * 100, digits=2))% time = $( time() - sa_start_time)"
@@ -185,9 +185,7 @@ function clean_up_trips!(sol::Solution, scenario_list::Array{Scenario,1}, statio
 end
 
 function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64)
-    #= save_sol(sol, "sol_error.jls")
-    @info "recheck station $station_id" =#
-    #station_id = 77
+    global stations_capacity
 
     stations_to_recheck, requests_to_unserve = Int64[], Int64[]
     
@@ -197,6 +195,7 @@ function recheck_station!(sol::Solution, scenario::Scenario, station_id::Int64)
     if sc_bounds[1] > sc_bounds[2]
         stations_to_recheck, requests_to_unserve = correct_station_trips(scenario, station_id, sol, sol.initial_cars_number[station_id])
         sc_bounds = get_station_cars_bounds(scenario, sol, station_id)
+       
     end
 
     #check the other scenarios
@@ -315,8 +314,6 @@ function correct_station_trips(scenario::Scenario, station_id::Int64, sol::Solut
    
     station_node_id = get_potential_locations()[station_id]
     station_capacity = stations_capacity[station_id]
-    
-    stations_to_recheck, requests_to_unserve = Int64[], Int64[]
 
     trips = scenario.feasible_paths[station_trips_ids[scenario.scenario_id][station_id], :]
 
@@ -532,5 +529,79 @@ function serve_new_requests!(sol::Solution, scenario_list::Array{Scenario,1}, se
         end
     end
 
+end
+
+function correct_station_trips_new(scenario::Scenario, station_id::Int64, sol::Solution, initial_number_of_cars)
+    #@info "############# corection station $station_id ###############"
+    #sol, station_id = load_sol("old_sol.jls"), 34;
+    #initial_number_of_cars = sol.initial_cars_number[station_id]
+     
+    global stations_capacity
+    global station_trips_ids
+    # the results of the correction
+    stations_to_recheck, requests_to_unserve = Int64[], Int64[]
+
+
+    station_node_id = get_potential_locations()[station_id]
+    station_capacity = stations_capacity[station_id]
+ 
+    #get the trips of the station 
+    trips_ids = station_trips_ids[scenario.scenario_id][station_id][findall(sol.selected_paths[scenario.scenario_id][station_trips_ids[scenario.scenario_id][station_id]])]
+    trips = scenario.feasible_paths[trips_ids, :]
+    
+    #sort the trips according to their interesting time for this station
+    trips_interesting_time = [(trip.origin_station == station_node_id) ? trip.start_driving_time : trip.arriving_time + 0.1 for trip in eachrow(trips)]
+    trips_order = sortperm(trips_interesting_time)
+    trips = trips[trips_order, :]
+    
+    not_correct = true
+    while not_correct
+        not_correct = false
+        cars_number = initial_number_of_cars
+        pickup_trips = []
+        dropoff_trips = []
+        for i in 1:nrow(trips)
+            #i = 15
+            trip = trips[i, :]
+            cars_number += (trip.origin_station == station_node_id) ? -1 : 1
+            (trip.origin_station == station_node_id) ? push!(pickup_trips, i) : push!(dropoff_trips, i)
+            
+            if cars_number < 0 
+
+                not_correct = true
+
+                # delete the less revenue trip
+                #selected_trip_id is the index of the selected trip in the trips dataframe
+                selected_trip_id = pickup_trips[argmin(trips.Rev[pickup_trips])]
+                sol.selected_paths[scenario.scenario_id][trips.fp_id[selected_trip_id]] = false
+                push!(requests_to_unserve, trips.req[selected_trip_id])
+                station_to_recheck = locations_dict[trips.destination_station[selected_trip_id]]
+                push!(stations_to_recheck, station_to_recheck)
+                
+                deleteat!(trips, selected_trip_id)
+                
+                break
+            elseif cars_number > station_capacity
+                not_correct = true
+
+                # delete the less revenue trip
+                #selected_trip_id is the index of the selected trip in the trips dataframe
+                selected_trip_id = dropoff_trips[argmin(trips.Rev[dropoff_trips])]
+                sol.selected_paths[scenario.scenario_id][trips.fp_id[selected_trip_id]] = false
+                push!(requests_to_unserve, trips.req[selected_trip_id])
+                station_to_recheck = locations_dict[trips.origin_station[selected_trip_id]]
+                push!(stations_to_recheck, station_to_recheck)
+                
+                deleteat!(trips, selected_trip_id)
+                
+                break
+            end
+        end
+    end
+   #=  bounds = get_station_cars_bounds(scenario, sol, station_id)
+    if bounds[1] > bounds[2]
+        @warn "infeasible solution after correction"
+    end =#
+    return stations_to_recheck, requests_to_unserve
 end
 

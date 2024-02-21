@@ -26,8 +26,8 @@ end
 
 function plot_stations(; g=manhaten_city_driving_graph) #= , ax::Union{Nothing, Axis}=nothing =#
     #firt plot the map
-    f, ax, p, osm = plot_manhatten()
-
+    #f, ax, p, _ = plot_manhatten()
+    ax = nothing
     # crate the stations graphs
     stations_graph = MetaGraph()
     locations = get_potential_locations()
@@ -70,13 +70,13 @@ function plot_stations(; g=manhaten_city_driving_graph) #= , ax::Union{Nothing, 
     nhover = NodeHoverHandler(node_hover_action)
     register_interaction!(ax, :nhover, nhover)
     
-    display(GLMakie.Screen(), f)
+    #display(GLMakie.Screen(), f)
 
     return f, p, ax, stations_graph
 end
 
 
-function plot_solution(sol::Solution; optimal_sol::Union{Nothing,Solution}=nothing)
+function plot_solution(sol::Solution, optimal_sol::Union{Nothing,Solution}=nothing)
 
     if isnothing(optimal_sol)
         optimal_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_7_requests_1000_walking_time_5.jls")

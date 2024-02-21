@@ -509,8 +509,8 @@ end
 
 function solve_single_scenario_using_gurobi()
     #list of parameters
-    scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    walking_time_list = [5, 10, 15]
+    scenario_list = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    walking_time_list = [5#= , 10, 15 =#]
 
 
 
@@ -534,7 +534,8 @@ function solve_single_scenario_using_gurobi()
         mip_file_path = project_path("Data/MIP/programs_file/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).mof.json")
         sol_file_path = project_path("Data/MIP/solutions/E_carsharing_mip_scenario_$(sc_id)_requests_1000_walking_time_$(wt).jls")
 
-        scenarios = initialize_scenarios([sc_id])
+        initialize_scenarios([sc_id])
+        scenarios = scenario_list
         TT = @elapsed begin
             #prepare the scenarios
             
@@ -846,10 +847,10 @@ function blink_mechanism_exp()
     #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
     T, T₀, I, α, β = 300.0, 10.0, 35, 0.98, 0.8
     #scenario parameters
-    scenario_list_ids = [1#= , 2, 3, 4, 5, 6, =# 7#= , 8, 9, 10 =#]
+    scenario_list_ids = [1, 2, 3, 4, 5, 15, 14, 8, 9, 10]
     walking_time_list = [5]
 
-    γ_list = collect(0.1:0.01:0.25)
+    γ_list = collect(0.0:0.01:0.3)
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/gamma_exp")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
@@ -909,14 +910,14 @@ end
 function adjacent_selection_effect()
     #global variables experiment related variables
     global rng
-    trial_nbr = 10
+    trial_nbr = 100
     main_seed = 1905
 
     #variables related to simulated simulated_annealing
     #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
     T, T₀, I, α, β = 300.0, 10.0, 35, 0.98, 0.8
     #scenario parameters
-    scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    scenario_list = [1]
     walking_time_list = [5]
     adjacent_selection_list = [true, false]
     # the folder where the results will be stored

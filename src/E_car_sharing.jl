@@ -24,7 +24,7 @@ using BenchmarkTools
 using SparseArrayKit
 
 using GraphMakie
-#using GLMakie
+using GLMakie
 
 using StatsPlots
 using Random
