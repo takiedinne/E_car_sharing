@@ -77,6 +77,7 @@ function solve_using_mixed_integer_program(scenarios::Vector{Scenario}; genarate
     mip = read_from_file(mip_file_path)
     
     set_optimizer(mip, Gurobi.Optimizer)
+    set_optimizer_attribute(mip, "Threads", 1)
     set_time_limit_sec(mip, 3600.0)
     set_silent(mip)
 

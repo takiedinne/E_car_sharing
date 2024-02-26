@@ -961,3 +961,53 @@ function adjacent_selection_effect()
     end
 
 end
+
+function solve_multiple_scenarios_using_gurobi()
+    #list of parameters
+    scenario_number_list = [2, 3, 5, 10, 15, 20]
+    walking_time_list = [5]
+
+    # the folder where the results will be stored
+    result_folder_for_this_experiment = string(results_folder, "/solve_multiple_scenarios_with_MIP")
+    !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
+    !isdir(project_path("Data/MIP/solutions")) && mkpath(project_path("Data/MIP/solutions"))
+
+    #the result file
+    results_save_path = string(result_folder_for_this_experiment, "/multiple_scenarios_MIP_Gurobi_", now(), ".csv")
+
+    # parameters for the experiments    
+    results_as_df = DataFrame(nbr_S=Int64[], β_w=[], PF_Opt=[], solver_time=[], total_time=[], terminal_status=[])
+
+    for (nbr_sc, wt) in Iterators.product(scenario_number_list, walking_time_list)
+        #nbr_sc, wt = 2, 5
+        #set the  global variables 
+        global maximum_walking_time = wt
+
+        # Mip file path
+        mip_file_path = project_path("Data/MIP/programs_file/ECS_MIP_scenarios_1_to_$(nbr_sc)_requests_1000_walking_time_$(wt).mof.json")
+        sol_file_path = project_path("Data/MIP/solutions/ECS_MIP_scenarios_1_to_$(nbr_sc)_requests_1000_walking_time_$(wt).jls")
+
+        initialize_scenarios(collect(1:nbr_sc))
+        scenarios = scenario_list
+        TT = @elapsed begin
+            #prepare the scenarios
+            
+            # solve using MIP solver 
+            #@info "solving the scenarios ..."
+            
+            obj, sol, cpu_time, solver_ter_state = solve_using_mixed_integer_program(scenarios, mip_file_path=mip_file_path)
+            
+        end
+        #save the results
+        if obj == Inf
+            push!(results_as_df, [nbr_sc, wt, obj, cpu_time, TT, solver_ter_state])
+        else
+            push!(results_as_df, [nbr_sc, wt, obj, cpu_time, TT, solver_ter_state])
+
+            #save the sol file
+            serialize(sol_file_path, sol)
+        end
+    end
+    CSV.write(results_save_path, results_as_df)
+    results_as_df
+end

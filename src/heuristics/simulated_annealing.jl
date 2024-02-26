@@ -50,7 +50,7 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, �
             push!(best_fitness_list, best_cost)
         end
         τ *= α
-        @info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
+        #@info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
     end
 
     @info "best_cost = $best_cost, gap = $(round((best_cost - opt_fit )/ opt_fit * 100, digits=2))% time = $( time() - sa_start_time)"
