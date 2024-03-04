@@ -2,22 +2,17 @@ export simulated_annealing
 
 global opt_fit = 1
 global sort_stations = false
-global best_fitness_list = []
 
 function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, τˢ::Float64=10., α::Float64=0.98, Ι::Int64=35, β::Float64=0.5)
-    #global rng = MersenneTwister(1234)
-    # initial_solution = generate_random_solution()
-    #τ⁰, τˢ, α, Ι, β = 1061.95, 1.06, 0.98, 30, .8
+    #keep track of the starting time
     sa_start_time = time()
 
-    #total_tried = 0
-    #total_accepted = 0
     current_solution = deepcopy(initial_solution)
     current_cost = ECS_objective_function(current_solution)
     best_solution = deepcopy(current_solution)
     best_cost = current_cost
+    global stations_requests = get_station_requests_from_solution(sol)
     τ = τ⁰
-    global best_fitness_list = []
     while τ > τˢ
         for _ in 1:Ι  # Number of iterations at each temperature
            
@@ -27,6 +22,11 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, �
 
             #clean_up_cars_number!(neighbor_solution)
             neighbor_cost = ECS_objective_function(neighbor_solution)
+            #= if !is_feasible_solution(neighbor_solution)
+                @warn "infeasible solution"
+                τ = 0
+                break
+            end =#
 
             if neighbor_cost <= current_cost
                 current_solution = neighbor_solution
@@ -47,7 +47,6 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, �
 
             end
 
-            push!(best_fitness_list, best_cost)
         end
         τ *= α
         #@info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"

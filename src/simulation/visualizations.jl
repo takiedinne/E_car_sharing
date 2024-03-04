@@ -1,5 +1,4 @@
-using GeometryBasics
-
+export plot_solution, plot_stations, plot_stations_and_requests
 function myLayout(g)
 
     y = [get_prop(g, v, :latitude) for v in vertices(g)]
@@ -77,7 +76,7 @@ end
 
 
 function plot_solution(sol::Solution, optimal_sol::Union{Nothing,Solution}=nothing)
-
+    
     if isnothing(optimal_sol)
         optimal_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_7_requests_1000_walking_time_5.jls")
     end
@@ -161,7 +160,10 @@ end
     @show_start_node: if true the start node of the requests will be shown, else the destination node will be shown
     @walking_time: the walking time in minutes that the user can walk to reach the station (default = 5)
 """
-function plot_stations_and_requests(requests_df::DataFrame; show_start_node::Bool=true, walking_time::Int=5, sol::Solution=Solution())
+function plot_stations_and_requests(scenario::Scenario; show_start_node::Bool=true, walking_time::Int=5, sol::Solution=Solution())
+    #sol = load_sol("sol.jls")
+    #scenario = scenario_list[1]
+    requests_df = scenario.request_list[unique(scenario.feasible_paths.req), :]
     
     #f, ax, p, _ = plot_manhatten()
     
@@ -180,8 +182,8 @@ function plot_stations_and_requests(requests_df::DataFrame; show_start_node::Boo
             nrow(filter(row -> get_walking_time(row[node_to_show], st) <= walking_time, requests_df)))
     end
 
-    requests_graph = MetaGraph()
     # crate the stations graphs
+    requests_graph = MetaGraph()
     for node in requests_df[:, node_to_show]
         add_vertex!(requests_graph, props(g, node))
     end
@@ -190,11 +192,26 @@ function plot_stations_and_requests(requests_df::DataFrame; show_start_node::Boo
         add_vertex!(requests_graph, props(g, node))
     end
 
+    #the edges
+    feasible_requests = unique(scenario.feasible_paths.req)
+    for trip in eachrow(scenario.feasible_paths)
+        req_node = findfirst(feasible_requests .== trip.req)
+        station_node = show_start_node ? locations_dict[trip.origin_station] + nrow(requests_df) : locations_dict[trip.destination_station] + nrow(requests_df)
+        add_edge!(requests_graph, req_node, station_node)
+    end
     
-    node_marker_array = vcat(['+' for _ in 1:nrow(requests_df)],
+    node_marker_array = vcat(['•' for _ in 1:nrow(requests_df)],
         [:rect for _ in 1:length(locations)])
-    node_color_array = vcat([:blue for _ in 1:nrow(requests_df)],
+    node_color_array = vcat([:black for _ in 1:nrow(requests_df)],
         [sol.open_stations_state[i] ? :green : :black for i in 1:length(locations)])
+
+    edge_color_array = [ :black for _ in edges(requests_graph)]
+    req_origin = unique(scenario.feasible_paths[:, [:req, :origin_station]])
+    selected_trips = scenario.feasible_paths[sol.selected_paths[1], :]
+    for i in 1:nrow(selected_trips)
+        edge_id = findfirst(req_origin.req .== selected_trips.req[i] .&& req_origin.origin_station .== selected_trips.origin_station[i])
+        edge_color_array[edge_id] = :green
+    end
 
     #plot it
     p = graphplot!(ax, requests_graph,
@@ -205,28 +222,31 @@ function plot_stations_and_requests(requests_df::DataFrame; show_start_node::Boo
         nlabels=["" for i in 1:nv(requests_graph)],
         nlabels_distance=100,
         nlabels_align=[(:center, :bottom) for i in 1:nv(requests_graph)],
-        nlabels_fontsize=[32 for i in 1:nv(requests_graph)]
+        nlabels_fontsize=[32 for i in 1:nv(requests_graph)],
+        edge_color=edge_color_array
     )
 
     #interactions
     deregister_interaction!(ax, :rectanglezoom)
 
+    
     ## node hover functioon
     function node_hover_action(state, idx, event, axis)
 
-        p.node_size[][idx] = (state && idx > nrow(requests_df)) ? 300 : 20
+        #p.node_size[][idx] = (state && idx > nrow(requests_df)) ? 300 : 20
 
-        p.node_size[][idx] = (state && idx > nrow(requests_df)) ? 300 : 20
-        p.node_size[] = p.node_size[] # trigger observable
+        #p.node_size[][idx] = (state && idx > nrow(requests_df)) ? 300 : 20
+        #p.node_size[] = p.node_size[] # trigger observable
 
         if state
-            nbr = idx > nrow(requests_df) ? requests_per_station[idx-nrow(requests_df)] : 0
+           #nbr = idx > nrow(requests_df) ? requests_per_station[idx-nrow(requests_df)] : 0
 
-            p.nlabels[][idx] = (idx > nrow(requests_df)) ? "id = $(idx - nrow(requests_df)); ∑req = $nbr" : "$idx"
-            p.node_marker[][idx] = (idx > nrow(requests_df)) ? :circle : '+'
+            #p.nlabels[][idx] = (idx > nrow(requests_df)) ? "id = $(idx - nrow(requests_df)); ∑req = $nbr" : "$idx"
+            p.nlabels[][idx] = (idx > nrow(requests_df)) ? "id = $(idx - nrow(requests_df))" : "$idx"
+            #p.node_marker[][idx] = (idx > nrow(requests_df)) ? :circle : '+'
         else
             p.nlabels[][idx] = ""
-            p.node_marker[][idx] = (idx <= nrow(requests_df)) ? '+' : :rect
+            p.node_marker[][idx] = (idx <= nrow(requests_df)) ? '•' : :rect
         end
         p.nlabels[] = p.nlabels[]
         p.node_marker[] = p.node_marker[] # trigger observable

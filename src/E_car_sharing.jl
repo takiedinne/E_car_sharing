@@ -22,6 +22,7 @@ using Serialization
 using BenchmarkTools
 
 using SparseArrayKit
+using GeometryBasics
 
 using GraphMakie
 using GLMakie
