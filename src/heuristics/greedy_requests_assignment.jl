@@ -30,7 +30,7 @@ function greedy_assign_requests()
     #get list of feasible requests
     feasible_requests = scenario.request_list[unique(scenario_list[1].feasible_paths.req), [:reqId, :Rev]]
     sort!(feasible_requests, [:Rev], rev=true)
-   #=  i = 1  =#
+    #=  i = 1  =#
     for req in eachrow(feasible_requests)
         #get origin stations for the request
         curr_req_trips_ids = request_feasible_trips_ids[scenario.scenario_id][req.reqId]
@@ -51,7 +51,7 @@ function greedy_assign_requests()
             #=  origin_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in origin_open_stations]
             origin_station_order = sortperm([origin_stations_bounds[i][2] - origin_stations_bounds[i][1] for i in eachindex(origin_stations_bounds)], rev=true)
             =#         
-            origin_station_order = shuffle(1:length(origin_open_stations))
+            origin_station_order = shuffle(rng, 1:length(origin_open_stations))
             for st in origin_open_stations[origin_station_order]
                 trip_id = findfirst(x -> x.origin_station == get_potential_locations()[st], eachrow(curr_req_trips))
                 trip = curr_req_trips[trip_id, :]
@@ -101,7 +101,7 @@ function greedy_assign_requests()
             #= destination_stations_bounds = [station_all_scenario_bounds(sol, scenario_list, st) for st in destination_open_stations]
             destination_station_order = sortperm([destination_stations_bounds[i][2] - destination_stations_bounds[i][1] for i in eachindex(destination_stations_bounds)], rev=true)
              =#
-            destination_station_order = shuffle(1:length(destination_open_stations))
+            destination_station_order = shuffle(rng, 1:length(destination_open_stations))
             for st in destination_open_stations[destination_station_order]
                 trip_id = findfirst(x -> x.destination_station == get_potential_locations()[st] && 
                                         x.origin_station == get_potential_locations()[origin_station], eachrow(curr_req_trips))

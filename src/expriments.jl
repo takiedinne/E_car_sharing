@@ -509,10 +509,8 @@ end
 
 function solve_single_scenario_using_gurobi()
     #list of parameters
-    scenario_list = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    walking_time_list = [5#= , 10, 15 =#]
-
-
+    scenario_list = collect(1:20)
+    walking_time_list = [5]
 
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/solve_single_scenarios_with_MIP")
@@ -524,7 +522,7 @@ function solve_single_scenario_using_gurobi()
 
     # parameters for the experiments    
     results_as_df = DataFrame(S_id=Int64[], β_w=[], PF_Opt=[], solver_time=[], total_time=[], terminal_status=[])
-
+    CSV.write(results_save_path, results_as_df)
     for (sc_id, wt) in Iterators.product(scenario_list, walking_time_list)
         
         #set the  global variables 
@@ -544,42 +542,47 @@ function solve_single_scenario_using_gurobi()
             obj, sol, cpu_time, solver_ter_state = solve_using_mixed_integer_program(scenarios, mip_file_path=mip_file_path)
         end
         #save the results
+        empty!(results_as_df)
         if obj == Inf
             push!(results_as_df, [ns, nr, wt, obj, missing, missing, cpu_time, TT])
         else
             push!(results_as_df, [sc_id, wt, obj, cpu_time, TT, solver_ter_state])
-
             #save the sol file
             serialize(sol_file_path, sol)
         end
+        CSV.write(results_save_path, results_as_df, append=true)
     end
-    CSV.write(results_save_path, results_as_df)
-    results_as_df
+    
 end
 
 function solve_single_scenario_using_SA()
     #global variables experiment related variables
     global rng
-    trial_nbr = 10
+    trial_nbr = 5
     main_seed = 1905
 
     rng = MersenneTwister(main_seed)
     #variables related to simulated simulated_annealing
     #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
-    T, T₀, I, α, β = 100.0, 10.0, 25, 0.98, 0.8
+    T, T₀, I, α, β = 100.0, 5.0, 20, 0.98, 0.8
     #scenario parameters
-    scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    scenario_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     walking_time_list = [5]
 
     # the folder where the results will be stored
-    result_folder_for_this_experiment = string(results_folder, "/solve_single_scenario_with_SA")
+    curr_time = now()
+    result_folder_for_this_experiment = string(results_folder, "/solve_single_scenario_with_SA/$curr_time")
     !isdir(result_folder_for_this_experiment) && mkpath(result_folder_for_this_experiment)
 
     #the result file
-    results_save_path = string(result_folder_for_this_experiment, "/SA_ruin_recreate", now(), ".csv")
-
-    df = DataFrame(scenario_id=Int64[], sa_obj=[], best_fit=[], cpu_time=[], mean_gap=[], best_gap=[])
-    CSV.write(results_save_path, df)# write the header
+    
+    agg_results_save_path = string(result_folder_for_this_experiment, "/SA_ruin_recreate_aggregated", curr_time, ".csv")
+    results_details_path = string(result_folder_for_this_experiment, "/SA_ruin_recreate_details", curr_time, ".csv")
+    
+    agg_df = DataFrame(scenario_id=Int64[], mean_fit=[], best_fit=[], cpu_time=[], mean_gap=[], best_gap=[])
+    details_df = DataFrame(scenario_id=Int64[], trial_id=Int64[], fit=[], cpu_time=[], gap=[])
+    CSV.write(agg_results_save_path, agg_df) # write the header
+    CSV.write(results_details_path, details_df) # write the header
 
     for (sc_id, wt) in Iterators.product(scenario_list, walking_time_list)
         
@@ -608,14 +611,19 @@ function solve_single_scenario_using_SA()
             if obj < best_fit
                 best_fit = obj
             end
+            gap = round((obj - opt_fit) / opt_fit * -100, digits=3)
+            empty!(details_df)
+            push!(details_df, [sc_id, i, obj, sa_cpu, gap])
+            CSV.write(results_details_path, details_df, append=true)
         end
+
         mean_gap = round((fit / trial_nbr - opt_fit) / opt_fit * 100, digits=3)
         best_gap = round((best_fit - opt_fit) / opt_fit * 100, digits=3)
         mean_fit = round(fit / trial_nbr, digits=3)
         mean_cpu_time = round(cpu_time / trial_nbr, digits=3)
-        empty!(df)
-        push!(df, [sc_id, mean_fit, best_fit, mean_cpu_time, mean_gap, best_gap])
-        CSV.write(results_save_path, df, append=true)
+        empty!(agg_df)
+        push!(agg_df, [sc_id, mean_fit, best_fit, mean_cpu_time, mean_gap, best_gap])
+        CSV.write(agg_results_save_path, agg_df, append=true)
 
     end
 
@@ -845,9 +853,9 @@ function blink_mechanism_exp()
     rng = MersenneTwister(main_seed)
     #variables related to simulated simulated_annealing
     #T, T₀, I, α, β = 796.0, 5.0, 82, 0.98, 0.8
-    T, T₀, I, α, β = 300.0, 10.0, 35, 0.98, 0.8
+    T, T₀, I, α, β = 100.0, 10.0, 20, 0.98, 0.8
     #scenario parameters
-    scenario_list_ids = [1, 2, 3, 4, 5, 15, 14, 8, 9, 10]
+    scenario_list_ids = [#= 1, 2, 3, 4, 5, 15, 14, 8, 9, 10 =# 8]
     walking_time_list = [5]
 
     γ_list = collect(0.0:0.01:0.3)
@@ -905,7 +913,6 @@ function blink_mechanism_exp()
     end
 
 end
-
 
 function adjacent_selection_effect()
     #global variables experiment related variables
