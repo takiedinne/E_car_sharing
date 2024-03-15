@@ -785,10 +785,12 @@ function ruin_depth_exp()
     seed = 1905
     global ruin_depth
     global rng = MersenneTwister(seed)
+    global maximum_walking_time = 10
 
+    
     ruin_depth_list = collect(0.01:0.01:0.3)
     trial_nbr = 5
-    scenario_list_ids = [#= 1,  =#2, #= 3, 4, 5, 6, =# 7#= , 8, 9, 10 =#]
+    scenario_list_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     
     # the folder where the results will be stored
     result_folder_for_this_experiment = string(results_folder, "/ruin_depth")
@@ -797,11 +799,8 @@ function ruin_depth_exp()
     #the result file
     results_save_path = string(result_folder_for_this_experiment, "/ruin_depth_", now(), ".csv")
 
-    df = DataFrame(depth=Float64[], Δ_fit=[], cpu_time=[])
+    df = DataFrame(depth=Float64[], gap=[], cpu_time=[])
     CSV.write(results_save_path, df)# write the header
- 
-    fill_adjacent_stations()
-    #fill in the list of solutions
     
     solution_list = []
     for sc in scenario_list_ids
@@ -812,29 +811,34 @@ function ruin_depth_exp()
     for rd in ruin_depth_list
         @info "we are trying ruin depth = $rd"
         ruin_depth = rd
-        sum_percentage = 0.0
-        cpu_time = 0.0
+        
+        sum_gap = 0.0
+        sum_cpu_time = 0.0
         
         for i in eachindex(scenario_list_ids)
             sc = scenario_list_ids[i]
             initialize_scenarios([sc])
+
+            opt_path = "Data/MIP/solutions/E_carsharing_mip_scenario_$(sc)_requests_1000_walking_time_$(maximum_walking_time).jls"
+            global opt_fit = ECS_objective_function(load_sol(opt_path))
             
-            opt_path = "Data/MIP/solutions/E_carsharing_mip_scenario_$(sc)_requests_1000_walking_time_5.jls"
-            fit = ECS_objective_function(load_sol(opt_path))
-            global opt_fit = fit
+            fit = 0.0
+            cpu_time = 0.0
             for tr in 1:trial_nbr
                 rng = MersenneTwister(seed + tr)
                 sol = solution_list[i][tr]
                 
-                sa_sol, sa_fit, sa_cpu = simulated_annealing(sol, 300.0, 10.0, 0.98, 35, 0.8)
+                sa_sol, sa_fit, sa_cpu = simulated_annealing(sol, 100.0, 10.0, 0.98, 20, 0.8)
                 
-                sum_percentage += (fit - sa_fit) / fit
+                fit += sa_fit
                 cpu_time += sa_cpu
             end
+            sum_gap += (fit / trial_nbr - opt_fit) / opt_fit * -100
+            sum_cpu_time += cpu_time / trial_nbr
 
         end
         empty!(df)
-        push!(df, [ruin_depth, sum_percentage / (length(scenario_list) * trial_nbr), cpu_time / (length(scenario_list) * trial_nbr)])
+        push!(df, [ruin_depth, sum_gap / length(scenario_list), sum_cpu_time / length(scenario_list)])
         CSV.write(results_save_path, df, append=true)
     end
     

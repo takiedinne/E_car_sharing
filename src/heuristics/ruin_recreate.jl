@@ -2,11 +2,11 @@ export ruin_recreate
 
 global prob_sorting = [0.4, 0.2, 0.3, 0.1]
 global adjacent_stations
-global ruin_depth = 0.15 # the percentage of stations to be closed
+global ruin_depth = 0.05 # the percentage of stations to be closed
 global γ = 0.00 # the blink probability
 global use_adjacent_selection = true
 
-global number_of_lost_requests = []
+global number_of_lost_requests = DataFrame(calculated_nbr = Int64[], real_nbr = Int64[])
 global stations_requests = []
 ############ Ruin procedure ##########################
 function adjacent_ruin!(sol::Solution)
@@ -308,11 +308,9 @@ end
 function ruin_recreate(sol)
     
     new_sol = deepcopy(sol)
-    adjacent_ruin!(new_sol)
+    #adjacent_ruin!(new_sol)
+    adjacent_requests_ruin!(new_sol)
     greedy_recreate!(new_sol)
-    #greedy_recreate_with_future_requests!(new_sol)
-    
-    #recreate_with_best_tree_path!(new_sol)
     
     return new_sol
 end
@@ -321,7 +319,7 @@ end
     Greedy recreate function that continue from the stations of the distination of the selected requests
     it uses the Function continue_from_station()
 """
-function greedy_recreate_new!(sol)
+function recreate_with_continuing!(sol)
     global rng
     global scenario_list
     global request_feasible_trips_ids
@@ -600,7 +598,7 @@ end
     Adjacent Rui thatn not close the stations however it delete some requests from the stations
     and if the all the requests of the stations are deleted then the station is closed
 """
-function adjacent_ruin_new!(sol::Solution)
+function adjacent_requests_ruin!(sol::Solution)
     #sol = generate_random_solution()
     # global variables
     global rng
@@ -627,7 +625,6 @@ function adjacent_ruin_new!(sol::Solution)
     st = st_seed
     lost_requests = [[] for _ in eachindex(scenario_list)]
     while deleted_requests_counter < n_requests
-
         trips = []
         for scenario in scenario_list
             #scenario = scenario_list[1]
@@ -676,7 +673,7 @@ function adjacent_ruin_new!(sol::Solution)
     end
 
     #global number_of_lost_requests
-    push!(number_of_lost_requests, sum([length(lost_requests[i]) for i in eachindex(lost_requests)]))
+    push!(number_of_lost_requests, (n_requests, sum([length(lost_requests[i]) for i in eachindex(lost_requests)])))
 end
 
 function calculate_requests_to_delete(sol)
@@ -687,14 +684,6 @@ function calculate_requests_to_delete(sol)
     return rand(rng, 1:max_request_nbr_to_delete)
 end
 
-function has_trips_from_open_stations(req::DataFrameRow, open_stations::Vector{Int64})
-    global scenario_list
-    global request_feasible_trips_ids
-    trips_ids = request_feasible_trips_ids[req.scenario_id][req.reqId]
-    trips = scenario_list[req.scenario_id].feasible_paths[trips_ids, :]
-    return any(x -> locations_dict[x.origin_station] in open_stations &&
-            locations_dict[x.destination_station] in open_stations, eachrow(trips))
-end
 
 #############################################
 """

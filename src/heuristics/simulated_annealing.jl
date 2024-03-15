@@ -4,6 +4,7 @@ global opt_fit = 1
 global sort_stations = false
 
 function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, τˢ::Float64=10., α::Float64=0.98, Ι::Int64=35, β::Float64=0.5)
+    global number_of_lost_requests = DataFrame(calculated_nbr = Int64[], real_nbr = Int64[])
     #keep track of the starting time
     sa_start_time = time()
     
