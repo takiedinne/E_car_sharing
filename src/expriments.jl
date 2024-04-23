@@ -785,7 +785,7 @@ function ruin_depth_exp()
     seed = 1905
     global ruin_depth
     global rng = MersenneTwister(seed)
-    global maximum_walking_time = 10
+    global maximum_walking_time = 5
 
     
     ruin_depth_list = collect(0.01:0.01:0.3)

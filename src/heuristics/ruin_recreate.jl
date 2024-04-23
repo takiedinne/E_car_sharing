@@ -1,6 +1,6 @@
 export ruin_recreate
 
-global prob_sorting = [0.4, 0.2, 0.3, 0.1]
+global prob_sorting = [1.4, 0.2, 0.3, 0.1]
 global adjacent_stations
 global ruin_depth = 0.05 # the percentage of stations to be closed
 global γ = 0.00 # the blink probability
@@ -310,8 +310,10 @@ function ruin_recreate(sol)
     new_sol = deepcopy(sol)
     #adjacent_ruin!(new_sol)
     adjacent_requests_ruin!(new_sol)
+    #random_requests_ruin!(new_sol)
+    #random_station_ruin!(new_sol)
     greedy_recreate!(new_sol)
-    
+    #recreate_with_best_tree_path!(new_sol)
     return new_sol
 end
 #############################################
@@ -684,7 +686,85 @@ function calculate_requests_to_delete(sol)
     return rand(rng, 1:max_request_nbr_to_delete)
 end
 
+function random_requests_ruin!(sol::Solution)
+    #sol = generate_random_solution()
+    # global variables
+    global rng
+    global adjacent_stations
+    global scenario_list
+   
+    
+    # calculate the number of stations to be closed
+    n_requests = calculate_requests_to_delete(sol)
 
+    #get all the served trips
+    scenario = scenario_list[1];
+
+    #get the adjacent stations
+    deleted_requests_counter = 0 #the index of stations to close
+    
+    while deleted_requests_counter < n_requests
+        #select a random requests
+        selected_trips_ids = findall(sol.selected_paths[scenario.scenario_id])
+        trips_id = rand(rng, selected_trips_ids)
+
+        #delete the selected trip
+        sol.selected_paths[scenario.scenario_id][trips_id] = false
+
+        #recheck origin and destination stations
+        or_st = locations_dict[scenario.feasible_paths[trips_id, :].origin_station]
+        des_st = locations_dict[scenario.feasible_paths[trips_id, :].destination_station]
+        stations_to_recheck = [or_st, des_st]
+        
+        lost_requests = [scenario.feasible_paths[trips_id, :].req]
+
+        for st in stations_to_recheck
+            # st = stations_to_recheck[2]
+            additional_station_to_recheck, requests_to_lost_from_station = recheck_station!(sol, scenario, st)
+            length(additional_station_to_recheck) > 0 && push!(stations_to_recheck, additional_station_to_recheck...)
+            length(requests_to_lost_from_station) > 0 && push!(lost_requests, requests_to_lost_from_station...)
+        end
+
+        deleted_requests_counter += length(lost_requests)
+        
+    end
+    
+end
+
+function random_station_ruin!(sol::Solution)
+    # global variables
+    global rng
+    global scenario_list
+    
+    open_stations = findall(sol.open_stations_state)
+
+    if length(open_stations) == 0
+        # all the stations are closed so we can not close any station
+        return
+    end
+
+    # calculate the number of stations to be closed
+    n_stations_to_close = calculate_station_to_close(sol)
+
+    #select the station that is used as seed for the ruin
+    stations_to_close = sample(rng, open_stations, n_stations_to_close, replace=false)
+
+    #get the adjacent stations
+   
+    for adj_st in stations_to_close
+        if sol.open_stations_state[adj_st]
+            sol.open_stations_state[adj_st] = false
+            sol.initial_cars_number[adj_st] = 0
+            #push!(stations_to_close, adj_st)
+            #closed_stations_counter += 1
+        end
+        
+    end
+
+    #clean the requests assignments
+    clean_up_trips!(sol, scenario_list, stations_to_close)
+    return sol
+end
 #############################################
 """
     Implement teh idea of selecting the destination stations accoording to the number of requests that can have in the future
@@ -720,7 +800,7 @@ function greedy_recreate_with_future_requests!(sol)
 
     for req in eachrow(unserved_requests)
 
-        #req = unserved_requests[4, :]
+        #req = unserved_requests[1, :]
         #get origin stations for the request
         request_trips_ids = request_feasible_trips_ids[req.scenario_id][req.reqId]
         curr_req_trips = scenario_list[req.scenario_id].feasible_paths[request_trips_ids, :]
@@ -834,7 +914,6 @@ function get_nbr_future_requests_from(sol, scenario, station_id, req_id)
     return nbr_requests
 end
 
-#STUDENT-22EU20kqt18903
 function get_station_trips_proportion(sol, scenario, station_id, req_id)
     global station_trips_ids
 
@@ -864,15 +943,13 @@ function get_station_trips_proportion(sol, scenario, station_id, req_id)
     proportion = length(trips_from_ids) / (length(trips_from_ids) + length(trips_to_ids))
     return proportion
 end
-
-function create_tree!(sol, scenario, station_id, st_time=0)
-
+################################################################
+function serve_max_requests!(sol, scenario, station_id, req_id)
     global stations_trips_ids
     served_requets = scenario.feasible_paths[sol.selected_paths[scenario.scenario_id], :req]
-    #scenario  = scenario_list[1]
+    
     g = MetaDiGraph()
-    props_dict = Dict(:station_id => station_id,
-    :time => st_time, 
+    props_dict = Dict(:station_id => station_id, 
     :solution => sol, 
     :served_requests => served_requets)
     
@@ -885,24 +962,32 @@ function create_tree!(sol, scenario, station_id, st_time=0)
 
         cur_node = popfirst!(queue)
         node_props = props(g, cur_node)
-        cur_st, starting_time, cur_sol, served_requets = node_props[:station_id], node_props[:time], node_props[:solution], node_props[:served_requests]
-                  
-        cur_st_node_id = get_potential_locations()[cur_st]
-        #get the unserved trips that start from the current station
-        trips_ids = station_trips_ids[scenario.scenario_id][cur_st]
-        trips_ids = trips_ids[.!cur_sol.selected_paths[scenario.scenario_id][trips_ids]]
-        trips = scenario.feasible_paths[trips_ids, :]
-        cur_st_unserved_trips = trips[trips.origin_station .== cur_st_node_id .&&
-                                    trips.start_driving_time .>= starting_time, :] 
-        
-        # filter the trips of already served requests
-        cur_st_unserved_trips = cur_st_unserved_trips[[req ∉ served_requets for req in cur_st_unserved_trips.req] , :]
-        
+        cur_st_unserved_trips = nothing
+        if cur_node == 1
+            # special case for node 1 where we should serve req_id
+            trips_ids = request_feasible_trips_ids[scenario.scenario_id][req_id]
+            trips = scenario.feasible_paths[trips_ids, :]
+            station_node = get_potential_locations()[station_id]
+            cur_st_unserved_trips = trips[trips.origin_station .== station_node, :]
+            cur_st, cur_sol, served_requets = node_props[:station_id], node_props[:solution], node_props[:served_requests]
+        else
+            
+            cur_st, starting_time, cur_sol, served_requets = node_props[:station_id], node_props[:time], node_props[:solution], node_props[:served_requests]
+            cur_st_node_id = get_potential_locations()[cur_st]
+            #get the unserved trips that start from the current station
+            trips_ids = station_trips_ids[scenario.scenario_id][cur_st]
+            trips_ids = trips_ids[.!cur_sol.selected_paths[scenario.scenario_id][trips_ids]]
+            trips = scenario.feasible_paths[trips_ids, :]
+            cur_st_unserved_trips = trips[trips.origin_station .== cur_st_node_id .&&
+                                        trips.start_driving_time .>= starting_time, :] 
+            
+            # filter the trips of already served requests
+            cur_st_unserved_trips = cur_st_unserved_trips[[req ∉ served_requets for req in cur_st_unserved_trips.req] , :]
+        end
         is_accepted = Dict{Int64, Tuple{Bool, Int64}}()
         nbr_acepted_trips = 0
         for trip in eachrow(cur_st_unserved_trips)
             #trip = cur_st_unserved_trips[1, :]
-           
             if !haskey(is_accepted, trip.req)
                 is_accepted[trip.req] = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, cur_sol, cur_st, trip)
             end
@@ -984,7 +1069,10 @@ function recreate_with_best_tree_path!(sol)
     global scenario_list
     global request_feasible_trips_ids
     global γ
-   
+    #=
+    rng = MersenneTwister(1584) 
+    sol = greedy_assign_requests()[1];
+    adjacent_requests_ruin!(sol) =#
     unserved_requests = get_unserved_requests(sol, scenario_list)
     # sort according to revenue and number of feasible paths and random
 
@@ -1000,10 +1088,100 @@ function recreate_with_best_tree_path!(sol)
     else
         shuffle!(rng, unserved_requests)
     end
-    requests_list = unserved_requests.reqId
-    
-    for req in requests_list
+    requests_list = copy(unserved_requests.reqId)
+   E_carsharing_sim(sol) 
+    while !isempty(requests_list)
+        # always try the first element
+        req = unserved_requests[findfirst(unserved_requests.reqId .== requests_list[1]), :]
+       
+        #step 1 check the origin of the requests
+        request_trips_ids = request_feasible_trips_ids[req.scenario_id][req.reqId]
+        curr_req_trips = scenario_list[req.scenario_id].feasible_paths[request_trips_ids, :]
+        scenario = scenario_list[req.scenario_id];
 
+        #get list of origin stations
+        origin_stations_ids = unique([locations_dict[x] for x in curr_req_trips.origin_station])
+
+        # step 1: select an origin station
+        origin_open_stations = origin_stations_ids[findall(sol.open_stations_state[origin_stations_ids])]
+        origin_can_serve, origin_new_cars, origin_station = false, -1, -1
+
+        #sort the stations by their ristricted cars bounds
+        for ost in origin_open_stations
+            #ost = origin_open_stations[1]
+            #the blink mechanism
+            if rand(rng) < γ
+                continue
+            end
+            trip_id = findfirst(x -> x.origin_station == get_potential_locations()[ost], eachrow(curr_req_trips))
+            trip = curr_req_trips[trip_id, :]
+
+            this_st_can_serve, this_st_new_cars = can_serve_and_get_cars_number(scenario_list, scenario.scenario_id, sol, ost, trip)
+
+            if !origin_can_serve && this_st_can_serve
+                origin_can_serve = true
+                origin_station = ost
+                origin_new_cars = this_st_new_cars
+
+                #if this station can serve and we gained in terms of cars number so this is the best alternative
+                if this_st_new_cars == sol.initial_cars_number[ost]
+                    #accept directly this station
+                    break
+                end
+            elseif this_st_can_serve
+                #here we found befor a feasible station, however we have to increament number of cars 
+                # so we need to check if selecting this stations is better "accepted when no need to increament the cars number"
+                if this_st_new_cars == sol.initial_cars_number[ost]
+                    origin_station = ost
+                    origin_new_cars = this_st_new_cars
+                    break
+                end
+            end
+        end
+
+        if !origin_can_serve
+            #we can not serve the request from an open a station
+            #try to open new station
+            origin_closed_stations = origin_stations_ids[findall(.!sol.open_stations_state[origin_stations_ids])]
+
+            if !isempty(origin_closed_stations)
+                #there is(are) station(s) open
+                stations_cost = [get_station_total_cost(st) for st in scenario.stations[origin_closed_stations]]
+                origin_closed_stations = origin_closed_stations[sortperm(stations_cost)]
+
+                for st in origin_closed_stations
+
+                    # the blink mechanism
+                    if rand(rng) < γ
+                        continue
+                    end
+
+                    #no need to check if we can serve the trip as we are opening a new station
+                    origin_can_serve, origin_station, origin_new_cars = true, st, 1
+                    break
+                end
+            end
+        end
+
+        if !origin_can_serve            
+            #we can not serve the request from the origin stations either by already open stations or by opening a new station
+            deleteat!(requests_list, 1)
+            continue
+        end
+        
+        #step 2: select a destination station
+        # construct the tree from origin_node that serve requets req
+
+        _, trips_ids = serve_max_requests!(sol, scenario, origin_station, req.reqId)
+        
+        if isempty(trips_ids)
+            deleteat!(requests_list, 1)
+            continue
+        end
+        
+        served_requests = scenario.feasible_paths[trips_ids, :].req
+        filter!(x -> x ∉ served_requests, requests_list)
+        
     end
     return sol
 end

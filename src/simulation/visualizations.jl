@@ -8,7 +8,7 @@ function myLayout(g)
 end
 
 function plot_manhatten()
-    
+
 
     osm = graph_from_file("Data/other/manhatten_drive.json";
         graph_type=:light, # SimpleDiGraph
@@ -19,7 +19,7 @@ function plot_manhatten()
     #autolimitaspect = map_aspect(area.minlat, area.maxlat)
 
     # plot it
-    fig, ax, plot = osmplot(osm#= ; axis=(; autolimitaspect) =#)
+    fig, ax, plot = osmplot(osm) #= ; axis=(; autolimitaspect) =#
     return fig, ax, plot, osm
 end
 
@@ -41,7 +41,7 @@ function plot_stations(; g=manhaten_city_driving_graph) #= , ax::Union{Nothing, 
         f = Figure()
         ax = Axis(f[1, 1])
     end
-    
+
     p = graphplot!(ax, stations_graph,
         layout=myLayout(stations_graph),
         node_marker=[:rect for _ in 1:nv(stations_graph)],
@@ -68,7 +68,7 @@ function plot_stations(; g=manhaten_city_driving_graph) #= , ax::Union{Nothing, 
     end
     nhover = NodeHoverHandler(node_hover_action)
     register_interaction!(ax, :nhover, nhover)
-    
+
     #display(GLMakie.Screen(), f)
 
     return f, p, ax, stations_graph
@@ -76,7 +76,7 @@ end
 
 
 function plot_solution(sol::Solution, optimal_sol::Union{Nothing,Solution}=nothing)
-    
+
     if isnothing(optimal_sol)
         optimal_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_7_requests_1000_walking_time_5.jls")
     end
@@ -160,13 +160,18 @@ end
     @show_start_node: if true the start node of the requests will be shown, else the destination node will be shown
     @walking_time: the walking time in minutes that the user can walk to reach the station (default = 5)
 """
-function plot_stations_and_requests(scenario::Scenario; show_start_node::Bool=true, walking_time::Int=5, sol::Solution=Solution())
-    #sol = load_sol("sol.jls")
-    #scenario = scenario_list[1]
+function plot_stations_and_requests(scenario::Scenario;
+    show_start_node::Bool=true, walking_time::Int=5,
+    sol::Solution=Solution(),
+    opt_sol::Union{Nothing,Solution} = nothing)
+
+   #=  sol = load_sol("sol.jls")
+    scenario = scenario_list[1]
+    show_start_node, walking_time = true, 10
+    opt_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_1_requests_1000_walking_time_$(walking_time).jls")
+ =#
     requests_df = scenario.request_list[unique(scenario.feasible_paths.req), :]
-    
-    #f, ax, p, _ = plot_manhatten()
-    
+
     f = Figure()
     ax = Axis(f[1, 1])
     g = manhaten_city_driving_graph
@@ -176,42 +181,39 @@ function plot_stations_and_requests(scenario::Scenario; show_start_node::Bool=tr
     figure_title = show_start_node ? "requests (origine nodes) and stations" : "requests (destination nodes) and stations"
     #get the number of requests that can be assigned to each station
     locations = get_potential_locations()
-    requests_per_station = Int64[]
-    for st in locations
-        push!(requests_per_station,
-            nrow(filter(row -> get_walking_time(row[node_to_show], st) <= walking_time, requests_df)))
-    end
 
     # crate the stations graphs
     requests_graph = MetaGraph()
-    for node in requests_df[:, node_to_show]
-        add_vertex!(requests_graph, props(g, node))
+    for req in eachrow(requests_df)
+        node = req[node_to_show]
+        props_dict = props(g, node)
+        props_dict[:node_type] = :request
+        props_dict[:request_id] = req.reqId
+        add_vertex!(requests_graph, props_dict)
     end
 
     for node in locations
         add_vertex!(requests_graph, props(g, node))
     end
 
-    #the edges
-    feasible_requests = unique(scenario.feasible_paths.req)
-    for trip in eachrow(scenario.feasible_paths)
-        req_node = findfirst(feasible_requests .== trip.req)
-        station_node = show_start_node ? locations_dict[trip.origin_station] + nrow(requests_df) : locations_dict[trip.destination_station] + nrow(requests_df)
-        add_edge!(requests_graph, req_node, station_node)
+
+    stations_color = [sol.open_stations_state[i] ? :red : :black for i in eachindex(sol.open_stations_state)]
+    if !isnothing(opt_sol)
+        for i in eachindex(sol.open_stations_state)
+            if sol.open_stations_state[i] && opt_sol.open_stations_state[i]
+                stations_color[i] = :green
+            elseif sol.open_stations_state[i]
+                stations_color[i] = :red
+            elseif opt_sol.open_stations_state[i]
+                stations_color[i] = :blue
+            else
+                stations_color[i] = :black
+            end
+        end
     end
-    
     node_marker_array = vcat(['•' for _ in 1:nrow(requests_df)],
         [:rect for _ in 1:length(locations)])
-    node_color_array = vcat([:black for _ in 1:nrow(requests_df)],
-        [sol.open_stations_state[i] ? :green : :black for i in 1:length(locations)])
-
-    edge_color_array = [ :black for _ in edges(requests_graph)]
-    req_origin = unique(scenario.feasible_paths[:, [:req, :origin_station]])
-    selected_trips = scenario.feasible_paths[sol.selected_paths[1], :]
-    for i in 1:nrow(selected_trips)
-        edge_id = findfirst(req_origin.req .== selected_trips.req[i] .&& req_origin.origin_station .== selected_trips.origin_station[i])
-        edge_color_array[edge_id] = :green
-    end
+    node_color_array = vcat([:black for _ in 1:nrow(requests_df)], stations_color)
 
     #plot it
     p = graphplot!(ax, requests_graph,
@@ -219,56 +221,97 @@ function plot_stations_and_requests(scenario::Scenario; show_start_node::Bool=tr
         node_marker=node_marker_array,
         node_size=[20 for i in 1:nv(requests_graph)],
         node_color=node_color_array,
-        nlabels=["" for i in 1:nv(requests_graph)],
         nlabels_distance=100,
         nlabels_align=[(:center, :bottom) for i in 1:nv(requests_graph)],
-        nlabels_fontsize=[32 for i in 1:nv(requests_graph)],
-        edge_color=edge_color_array
+        nlabels_fontsize=[32 for i in 1:nv(requests_graph)]
     )
 
     #interactions
     deregister_interaction!(ax, :rectanglezoom)
 
-    
     ## node hover functioon
-    function node_hover_action(state, idx, event, axis)
+    function node_click_action(idx, event, axis)
 
-        #p.node_size[][idx] = (state && idx > nrow(requests_df)) ? 300 : 20
-
-        #p.node_size[][idx] = (state && idx > nrow(requests_df)) ? 300 : 20
-        #p.node_size[] = p.node_size[] # trigger observable
-
-        if state
-           #nbr = idx > nrow(requests_df) ? requests_per_station[idx-nrow(requests_df)] : 0
-
-            #p.nlabels[][idx] = (idx > nrow(requests_df)) ? "id = $(idx - nrow(requests_df)); ∑req = $nbr" : "$idx"
-            p.nlabels[][idx] = (idx > nrow(requests_df)) ? "id = $(idx - nrow(requests_df))" : "$idx"
-            #p.node_marker[][idx] = (idx > nrow(requests_df)) ? :circle : '+'
-        else
-            p.nlabels[][idx] = ""
-            p.node_marker[][idx] = (idx <= nrow(requests_df)) ? '•' : :rect
+        if idx > nrow(requests_df)
+            return
         end
-        p.nlabels[] = p.nlabels[]
-        p.node_marker[] = p.node_marker[] # trigger observable
 
-        p.node_size[] = p.node_size[] # trigger observable
-        p.nlabels[] = p.nlabels[] # trigger observable
+        #get all the feasible paths of the request
+        reqId = get_prop(requests_graph, idx, :request_id)
+        @info "node $reqId"
+        trips_ids = request_feasible_trips_ids[scenario.scenario_id][reqId]
+        trips = scenario.feasible_paths[trips_ids, :]
+
+        #delete all the edges
+        [rem_edge!(requests_graph, e) for e in edges(requests_graph)]
+
+        # add the edges to the graph
+        for trip in eachrow(trips)
+            #trip = trips[1, :]
+            o_node = locations_dict[trip.origin_station] + nrow(requests_df)
+            d_node = locations_dict[trip.destination_station] + nrow(requests_df)
+            add_edge!(requests_graph, o_node, d_node)
+        end
+
+        # color the edges green for the optimal and the red for selected in sol
+        selected_trip_id = findfirst(sol.selected_paths[scenario.scenario_id][trips_ids])
+        opt_trip_id = findfirst(opt_sol.selected_paths[scenario.scenario_id][trips_ids])
+
+        edges_color = [:black for e in edges(requests_graph)]
+        if !isnothing(selected_trip_id)
+            edges_color[selected_trip_id] = :red
+        end
+        if !isnothing(opt_trip_id)
+            edges_color[opt_trip_id] = :blue
+        end
+        if !isnothing(selected_trip_id) && !isnothing(opt_trip_id)
+            if selected_trip_id == opt_trip_id
+                edges_color[selected_trip_id] = :green
+            end
+        end
+        @info edges_color
+        #reploting the graph
+        empty!(axis)
+        graphplot!(axis, requests_graph,
+            layout=myLayout(requests_graph),
+            node_marker=node_marker_array,
+            node_size=[20 for i in 1:nv(requests_graph)],
+            node_color=node_color_array,
+            nlabels_distance=100,
+            nlabels_align=[(:center, :bottom) for i in 1:nv(requests_graph)],
+            nlabels_fontsize=[32 for i in 1:nv(requests_graph)],
+            edge_color=edges_color
+        )
+        deregister_interaction!(axis, :nodeclick)
+        nclick = NodeClickHandler(node_click_action)
+        register_interaction!(axis, :nodeclick, nclick)
 
     end
-    ax.title = figure_title
-    nhover = NodeHoverHandler(node_hover_action)
-    register_interaction!(ax, :nhover, nhover)
+
+    nclick = NodeClickHandler(node_click_action)
+    register_interaction!(ax, :nodeclick, nclick)
 
 
     # The legend traitement
     elem_1 = PolyElement(color=:green, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
-    elem_2 = PolyElement(color=:black, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
-    
+    elem_2 = PolyElement(color=:blue, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    elem_3 = PolyElement(color=:red, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    elem_4 = PolyElement(color=:black, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    elem_5 = PolyElement(color=:white, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+    elem_6 = PolyElement(color=:white, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
+
+    stations_sol = count(sol.open_stations_state)
+    stations_opt_sol = count(opt_sol.open_stations_state)
+    cars_sol = sum(sol.initial_cars_number)
+    cars_opt_sol = sum(opt_sol.initial_cars_number)
     Legend(f[1, 2],
-        [elem_1, elem_2],
-        ["station is open", "station is close"],
+        [elem_1, elem_2, elem_3, elem_4, elem_5, elem_6],
+        ["open in both sols", "open in optimal", "open in sol", "closed in both sols",
+            "$stations_sol stations in sol with $cars_sol cars", "$stations_opt_sol stations in optimal with $cars_opt_sol cars"
+        ],
         patchsize=(35, 35), rowgap=10)
 
     display(GLMakie.Screen(), f)
 
 end
+

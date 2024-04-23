@@ -7,7 +7,7 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, �
     global number_of_lost_requests = DataFrame(calculated_nbr = Int64[], real_nbr = Int64[])
     #keep track of the starting time
     sa_start_time = time()
-    
+    best_fit_track = []
     current_solution = deepcopy(initial_solution)
     current_cost = ECS_objective_function(current_solution)
     best_solution = deepcopy(current_solution)
@@ -48,14 +48,14 @@ function simulated_annealing(initial_solution::Solution, τ⁰::Float64=300.0, �
                 end
 
             end
-
+            push!(best_fit_track, best_cost)
         end
         τ *= α
         #@info "current cost: $current_cost, best cost: $best_cost, temperature: $τ"
     end
 
     @info "best_cost = $best_cost, gap = $(round((best_cost - opt_fit )/ opt_fit * 100, digits=2))% time = $( time() - sa_start_time)"
-    return best_solution, best_cost, (time() - sa_start_time)
+    return best_solution, best_cost, (time() - sa_start_time), best_fit_track
 end
 
 ##### Neighborhood functions #####

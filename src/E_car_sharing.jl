@@ -25,7 +25,7 @@ using SparseArrayKit
 using GeometryBasics
 
 using GraphMakie
-#using GLMakie
+using GLMakie
 
 using StatsPlots
 using Random
