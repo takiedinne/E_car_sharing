@@ -77,9 +77,9 @@ end
 
 function plot_solution(sol::Solution, optimal_sol::Union{Nothing,Solution}=nothing)
 
-    if isnothing(optimal_sol)
+    #= if isnothing(optimal_sol)
         optimal_sol = load_sol("Data/MIP/solutions/E_carsharing_mip_scenario_7_requests_1000_walking_time_5.jls")
-    end
+    end =#
 
     f, p, ax, g = plot_stations()
     # change the colore of the stations
@@ -135,9 +135,9 @@ function plot_solution(sol::Solution, optimal_sol::Union{Nothing,Solution}=nothi
     elem_6 = PolyElement(color=:white, points=Point2f[(0, 0), (1, 0), (1, 1), (0, 1)])
 
     stations_sol = sum(sol.open_stations_state)
-    stations_opt_sol = sum(optimal_sol.open_stations_state)
+    stations_opt_sol = isnothing(optimal_sol) ? 0 : sum(optimal_sol.open_stations_state)
     cars_sol = sum(sol.initial_cars_number)
-    cars_opt_sol = sum(optimal_sol.initial_cars_number)
+    cars_opt_sol = isnothing(optimal_sol) ? 0 : sum(optimal_sol.initial_cars_number)
 
 
     Legend(f[1, 2],
